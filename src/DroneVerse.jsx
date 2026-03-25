@@ -1888,58 +1888,62 @@ Format as plain text, no markdown.`;
             </div>}
           </div>}
           <div style={{ flex: 1, display: "flex", gap: 1, padding: 1, background: T.bgCard }}>
-            {vw === "map" && <>
-              {/* MAP 60% */}
-              <div style={{ flex: 3, position: "relative", minHeight: 0 }}>
-                <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} victims={mis?.victims} />
-                <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: "rgba(0,0,0,0.7)", padding: "4px 10px", borderRadius: 4, fontSize: 11, color: "#00e5ff", zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ VỆ TINH</div>
-              </div>
-              {/* LOG PANEL 40% */}
-              <div style={{ flex: 2, display: "flex", flexDirection: "column", background: T.bgPanel, borderLeft: `1px solid ${T.border}`, overflow: "hidden", minHeight: 0 }}>
-                {/* Mission clock + status */}
-                <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: elapsed > 300 ? T.danger : T.accent, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" }}>T+{String(Math.floor(elapsed / 60)).padStart(2, "0")}:{String(Math.floor(elapsed % 60)).padStart(2, "0")}</div>
-                  <div style={{ fontSize: 11, color: T.textDim }}>{dr.length} drone | Pin: {dr.length ? Math.round(dr.reduce((s,d) => s + d.fd.battery, 0) / dr.length) : 0}%</div>
+            {vw === "map" && <div style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
+              {/* MAP 60% — absolute fill */}
+              <div style={{ width: "60%", position: "relative" }}>
+                <div style={{ position: "absolute", inset: 0 }}>
+                  <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} victims={mis?.victims} />
                 </div>
-                {/* Phase indicator */}
-                {phaseInfo && <div style={{ padding: "8px 14px", borderBottom: `1px solid ${T.border}`, borderLeft: `3px solid ${T.purple}` }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: T.purple, marginBottom: 4 }}>{VI.phase} {phaseInfo.idx + 1}/{phaseInfo.total}: {phaseInfo.name}</div>
-                  <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6 }}>{phaseInfo.briefing}</div>
+                <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: "rgba(0,0,0,0.7)", padding: "4px 10px", borderRadius: 4, fontSize: 12, color: "#00e5ff", zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ VỆ TINH</div>
+              </div>
+              {/* LOG PANEL 40% — absolute fill, column layout */}
+              <div style={{ width: "40%", display: "flex", flexDirection: "column", background: T.bgPanel, borderLeft: `1px solid ${T.border}` }}>
+                {/* Clock — fixed */}
+                <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: elapsed > 300 ? T.danger : T.accent, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" }}>T+{String(Math.floor(elapsed / 60)).padStart(2, "0")}:{String(Math.floor(elapsed % 60)).padStart(2, "0")}</div>
+                  <div style={{ fontSize: 12, color: T.textDim }}>{dr.length} drone | Pin: {dr.length ? Math.round(dr.reduce((s,d) => s + d.fd.battery, 0) / dr.length) : 0}%</div>
+                </div>
+                {/* Phase — fixed, scrollable if too tall */}
+                {phaseInfo && <div style={{ padding: "8px 14px", borderBottom: `1px solid ${T.border}`, borderLeft: `3px solid ${T.purple}`, maxHeight: "30%", overflow: "auto", flexShrink: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.purple, marginBottom: 4 }}>{VI.phase} {phaseInfo.idx + 1}/{phaseInfo.total}: {phaseInfo.name}</div>
+                  <div style={{ fontSize: 12, color: T.textDim, marginBottom: 6 }}>{phaseInfo.briefing}</div>
                   {phaseInfo.objectives.map(obj => {
                     const done = phaseInfo.status?.[obj.id];
-                    return <div key={obj.id} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, marginBottom: 3 }}>
-                      {done ? <CheckCircle size={12} color={T.success} /> : <Circle size={12} color={T.borderAccent} />}
+                    return <div key={obj.id} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, marginBottom: 3 }}>
+                      {done ? <CheckCircle size={13} color={T.success} /> : <Circle size={13} color={T.borderAccent} />}
                       <span style={{ color: done ? T.success : T.textFaint }}>{obj.desc}</span>
                     </div>;
                   })}
-                  {mis?.victims && <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 6, paddingTop: 6, fontSize: 11, display: "flex", gap: 12 }}>
+                  {mis?.victims && <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 6, paddingTop: 6, fontSize: 12, display: "flex", gap: 12 }}>
                     <span style={{ color: "#ff2040" }}>🔴 P1: {mis.victims.filter(v=>v.priority===1).reduce((s,v)=>s+v.people,0)}</span>
                     <span style={{ color: "#ff8c00" }}>🟠 P2: {mis.victims.filter(v=>v.priority===2).reduce((s,v)=>s+v.people,0)}</span>
                     <span style={{ color: "#00cc66" }}>🟢 P3: {mis.victims.filter(v=>v.priority===3).reduce((s,v)=>s+v.people,0)}</span>
                   </div>}
                 </div>}
-                {/* Realtime Log */}
-                <div ref={el => { if (el) el.scrollTop = el.scrollHeight; }} style={{ flex: 1, overflow: "auto", padding: "8px 10px", minHeight: 0 }}>
-                  <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><Activity size={12} /> {VI.log}</div>
-                  {logs.map((l, i) => <div key={i} style={{
-                    fontSize: 12, padding: "6px 10px", marginBottom: 4, borderRadius: 6, lineHeight: 1.6,
-                    borderLeft: `3px solid ${l.l === "success" ? T.success : l.l === "warning" ? T.warn : l.l === "critical" ? T.danger : T.border}`,
-                    background: l.l === "success" ? `${T.success}10` : l.l === "warning" ? `${T.warn}10` : l.l === "critical" ? `${T.danger}10` : "transparent",
-                    color: T.text, animation: i === 0 ? "logSlide 0.3s ease" : "none",
-                  }}>
-                    <span style={{ color: T.textMuted, marginRight: 6, fontSize: 10 }}>{new Date(l.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
-                    {l.m}
-                  </div>)}
+                {/* Log — fills remaining space, SCROLLABLE */}
+                <div style={{ flex: 1, minHeight: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                  <div style={{ padding: "6px 10px 0", fontSize: 12, color: T.textMuted, letterSpacing: 1, display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}><Activity size={12} /> {VI.log}</div>
+                  <div ref={el => { if (el) setTimeout(() => { el.scrollTop = el.scrollHeight; }, 0); }} style={{ flex: 1, minHeight: 0, overflowY: "scroll", padding: "4px 10px 8px" }}>
+                    {logs.map((l, i) => <div key={i} style={{
+                      fontSize: 13, padding: "6px 10px", marginBottom: 4, borderRadius: 6, lineHeight: 1.6,
+                      borderLeft: `3px solid ${l.l === "success" ? T.success : l.l === "warning" ? T.warn : l.l === "critical" ? T.danger : T.border}`,
+                      background: l.l === "success" ? `${T.success}10` : l.l === "warning" ? `${T.warn}10` : l.l === "critical" ? `${T.danger}10` : "transparent",
+                      color: T.text, animation: i === 0 ? "logSlide 0.3s ease" : "none",
+                    }}>
+                      <span style={{ color: T.textMuted, marginRight: 6, fontSize: 11 }}>{new Date(l.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                      {l.m}
+                    </div>)}
+                  </div>
                 </div>
-                {/* Fleet mini */}
-                <div style={{ padding: "6px 14px", borderTop: `1px solid ${T.border}`, fontSize: 13, color: T.textDim, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {/* Fleet status — fixed bottom */}
+                <div style={{ padding: "6px 14px", borderTop: `1px solid ${T.border}`, fontSize: 13, color: T.textDim, display: "flex", gap: 12, flexWrap: "wrap", flexShrink: 0 }}>
                   <span>Gió: {windSpd}m/s</span>
                   <span>{VI.friendly}: {fr}</span>
                   {ho > 0 && <span style={{ color: T.danger }}>{VI.hostile}: {ho}</span>}
                   {eliminated > 0 && <span style={{ color: T.hostile }}>Loại: {eliminated}</span>}
                 </div>
               </div>
-            </>}
+            </div>}
             {(vw === "split" || vw === "3d") && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
               <Viewport3D drones={dr} threats={th} waypoints={wp} selectedId={sel} camMode={camMode} windSpd={windSpd} threeTheme={T.three} T={T} />
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.textMuted }}><Box size={12} /> 3D TACTICAL</div>
