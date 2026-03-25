@@ -73,7 +73,7 @@ const DRONE_SPECS = {
   "HERA-S": { name: "HERA Scout", maxSpeed: 22, cruiseSpeed: 15, maxAlt: 500, endurance: 45, rcs: 0.01, sensors: ["EO/IR","LiDAR"], color: "#00e5ff", iff: "FRIENDLY" },
   "HERA-C": { name: "HERA Cargo", maxSpeed: 16, cruiseSpeed: 11, maxAlt: 300, endurance: 30, rcs: 0.05, sensors: ["GPS","Alt"], color: "#ffb020", iff: "FRIENDLY" },
   "VEGA-X": { name: "Vega Combat", maxSpeed: 30, cruiseSpeed: 22, maxAlt: 800, endurance: 35, rcs: 0.008, sensors: ["EO/IR","SAR","ESM"], color: "#ff3b5c", iff: "FRIENDLY" },
-  "BOGEY":  { name: "Unknown UAV", maxSpeed: 20, cruiseSpeed: 14, maxAlt: 400, endurance: 40, rcs: 0.03, sensors: [], color: T.hostile, iff: "HOSTILE" },
+  "BOGEY":  { name: "Unknown UAV", maxSpeed: 20, cruiseSpeed: 14, maxAlt: 400, endurance: 40, rcs: 0.03, sensors: [], color: "#ff6b35", iff: "HOSTILE" },
 };
 
 class FlightDynamics {
