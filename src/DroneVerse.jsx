@@ -5,6 +5,7 @@ import {
   Cpu, Gauge, Activity, Layers, Clock, Users, Box, ArrowUpRight,
   BarChart3, Compass, Maximize2, Eye, MapPin, FileText, Plus, Copy, X,
   Wind, UserPlus, Home, Shuffle, CircleDot, Film, Volume2, CheckCircle, Circle,
+  Brain, GitBranch,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from "recharts";
 
@@ -50,7 +51,9 @@ class SwarmController {
   constructor() { this.drones = []; this.waypoints = []; this.threats = []; this.perDroneWP = new Map(); }
   addDrone(id, typeKey, x, y, alt, hdg) {
     const spec = DRONE_SPECS[typeKey];
-    this.drones.push({ id, typeKey, spec, fd: new FlightDynamics(spec, x, y, alt || 150, hdg || Math.random() * 360), wpIdx: 0, status: "ACTIVE", trail: [] });
+    this.drones.push({ id, typeKey, spec, fd: new FlightDynamics(spec, x, y, alt || 150, hdg || Math.random() * 360), wpIdx: 0, status: "ACTIVE", trail: [],
+      memory: { sectorsVisited: new Set(), threatsEncountered: new Set(), eliminationCount: 0, distanceTraveled: 0, timeInDangerZone: 0, closeCallCount: 0, missionPhases: 0, experienceScore: 0,
+        personality: { aggression: Math.random(), autonomy: Math.random(), teamwork: Math.random() } } });
   }
   assignWaypoints(w) { this.waypoints = w; }
   setThreats(t) { this.threats = t; }
@@ -104,11 +107,12 @@ class SwarmController {
         }
       }
 
-      // Separation (all drones)
+      // Separation — personality: teamwork affects distance
+      const sepDist = d.memory ? (d.memory.personality.teamwork > 0.7 ? 20 : d.memory.personality.teamwork < 0.3 ? 35 : 25) : 25;
       for (const o of this.drones) {
         if (o.id === d.id) continue;
         const sx = d.fd.x - o.fd.x, sy = d.fd.y - o.fd.y, sd = Math.sqrt(sx * sx + sy * sy);
-        if (sd < 25 && sd > 0) d.fd.targetHdg = (d.fd.targetHdg + ((Math.atan2(sx, sy) / DEG + 360) % 360 - d.fd.targetHdg) * ((25 - sd) / 25) * 0.3 + 360) % 360;
+        if (sd < sepDist && sd > 0) d.fd.targetHdg = (d.fd.targetHdg + ((Math.atan2(sx, sy) / DEG + 360) % 360 - d.fd.targetHdg) * ((sepDist - sd) / sepDist) * 0.3 + 360) % 360;
       }
 
       // Combat: VEGA-X eliminates nearby HOSTILE
@@ -117,15 +121,17 @@ class SwarmController {
           if (o.spec.iff !== "HOSTILE" || o.status !== "ACTIVE") continue;
           if (Math.hypot(d.fd.x - o.fd.x, d.fd.y - o.fd.y) < 15) {
             o.status = "ELIMINATED";
+            if (d.memory) d.memory.eliminationCount++;
             if (this.onEliminate) this.onEliminate(o.id, d.id);
           }
         }
       }
 
-      // Threat avoidance + GPS-DENY penalty
+      // Threat avoidance — personality: aggression affects evade radius
+      const evadeMul = d.memory ? (d.memory.personality.aggression < 0.3 ? 1.5 : d.memory.personality.aggression > 0.7 ? 0.8 : 1.2) : 1.2;
       for (const t of this.threats) {
         const tx = d.fd.x - t.x, ty = d.fd.y - t.y, td = Math.sqrt(tx * tx + ty * ty);
-        if (td < t.radius * 1.2) {
+        if (td < t.radius * evadeMul) {
           d.fd.targetHdg = (Math.atan2(tx, ty) / DEG + 360) % 360;
           d.fd.targetSpeed = d.spec.maxSpeed;
           d.fd.targetAlt = Math.min(d.spec.maxAlt, d.fd.alt + 50);
@@ -137,10 +143,118 @@ class SwarmController {
         }
       }
 
+      // Autonomy: high-autonomy drones occasionally deviate heading
+      if (d.memory && d.memory.personality.autonomy > 0.7 && Math.random() < 0.1 * dt) {
+        d.fd.targetHdg = (d.fd.targetHdg + (Math.random() - 0.5) * 30 + 360) % 360;
+      }
+
+      // Agent memory updates
+      if (d.memory) {
+        d.memory.distanceTraveled += d.fd.speed * dt;
+        const sid = `${Math.floor((d.fd.x + 400) / 200)}-${Math.floor((d.fd.y + 400) / 200)}`;
+        d.memory.sectorsVisited.add(sid);
+        for (const t of this.threats) {
+          const td2 = Math.hypot(d.fd.x - t.x, d.fd.y - t.y);
+          if (td2 < t.radius) d.memory.timeInDangerZone += dt;
+          if (td2 < t.radius * 0.5) d.memory.threatsEncountered.add(t.type);
+        }
+        for (const o of this.drones) {
+          if (o.spec.iff === "HOSTILE" && o.status === "ACTIVE" && Math.hypot(d.fd.x - o.fd.x, d.fd.y - o.fd.y) < 20) d.memory.closeCallCount++;
+        }
+        d.memory.experienceScore = Math.min(100, Math.max(0,
+          d.memory.sectorsVisited.size * 5 + d.memory.eliminationCount * 15 + d.memory.distanceTraveled * 0.005 + d.memory.missionPhases * 10 - d.memory.closeCallCount * 2));
+      }
+
       d.fd.update(dt);
       d.trail.push({ x: d.fd.x, y: d.fd.y }); if (d.trail.length > 80) d.trail.shift();
     }
   }
+}
+
+// ═══════════════════════════════════════════
+// KNOWLEDGE GRAPH
+// ═══════════════════════════════════════════
+class KnowledgeGraph {
+  constructor() { this.nodes = new Map(); this.edges = []; }
+  addNode(id, type, label, data = {}) { this.nodes.set(id, { type, label, data, createdAt: Date.now() }); }
+  updateNode(id, data) { const n = this.nodes.get(id); if (n) Object.assign(n.data, data); }
+  addEdge(from, to, relation, weight = 1) { this.edges.push({ from, to, relation, weight, timestamp: Date.now() }); }
+  removeEdges(relation) { this.edges = this.edges.filter(e => e.relation !== relation); }
+  getNeighbors(id, relation) { return this.edges.filter(e => (e.from === id || e.to === id) && (!relation || e.relation === relation)).map(e => e.from === id ? e.to : e.from); }
+  query(type) { return [...this.nodes.entries()].filter(([, n]) => n.type === type).map(([id, n]) => ({ id, ...n })); }
+  addEvent(desc, involved = []) {
+    const events = this.query("event");
+    if (events.length >= 100) { const oldest = events[0]; this.nodes.delete(oldest.id); this.edges = this.edges.filter(e => e.from !== oldest.id && e.to !== oldest.id); }
+    const eid = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    this.addNode(eid, "event", desc, { timestamp: Date.now() });
+    for (const nid of involved) this.addEdge(eid, nid, "involves");
+    return eid;
+  }
+  toSummary() {
+    const types = {}; for (const [, n] of this.nodes) types[n.type] = (types[n.type] || 0) + 1;
+    const rels = {}; for (const e of this.edges) rels[e.relation] = (rels[e.relation] || 0) + 1;
+    const sectors = this.query("sector");
+    const mostVisited = sectors.reduce((best, s) => (s.data.visitCount || 0) > (best?.data.visitCount || 0) ? s : best, null);
+    const leastVisited = sectors.reduce((least, s) => (s.data.visitCount || 0) < (least?.data.visitCount || Infinity) ? s : least, null);
+    return { nodeCount: this.nodes.size, edgeCount: this.edges.length, types, rels, mostVisited: mostVisited?.label, leastVisited: leastVisited?.label, mostVisitCount: mostVisited?.data.visitCount || 0, leastVisitCount: leastVisited?.data.visitCount || 0 };
+  }
+}
+
+// ═══════════════════════════════════════════
+// EMERGENCE DETECTOR
+// ═══════════════════════════════════════════
+class EmergenceDetector {
+  constructor() { this.events = []; this.lastPatterns = []; }
+  analyze(drones) {
+    const active = drones.filter(d => d.status === "ACTIVE" && d.spec.iff === "FRIENDLY");
+    if (active.length < 3) return [];
+    const patterns = [];
+    // Clustering
+    const clusters = this.findClusters(active, 60);
+    if (clusters.length >= 2 && clusters.some(c => c.length >= 3))
+      patterns.push({ type: "SPLIT", desc: `Fleet split into ${clusters.length} groups` });
+    // Herding
+    const hdgs = active.map(d => d.fd.hdg);
+    const hdgStd = this.circularStdDev(hdgs);
+    if (hdgStd < 20) patterns.push({ type: "HERDING", desc: `Coordinated movement, spread ${Math.round(hdgStd)}°` });
+    // Retreat detection — center of mass moving away from threats
+    if (drones.some(d => d.spec.iff === "HOSTILE" && d.status === "ACTIVE")) {
+      const cx = active.reduce((s, d) => s + d.fd.x, 0) / active.length;
+      const cy = active.reduce((s, d) => s + d.fd.y, 0) / active.length;
+      const avgHdg = Math.atan2(active.reduce((s, d) => s + Math.sin(d.fd.hdg * DEG), 0), active.reduce((s, d) => s + Math.cos(d.fd.hdg * DEG), 0));
+      const hostiles = drones.filter(d => d.spec.iff === "HOSTILE" && d.status === "ACTIVE");
+      const hx = hostiles.reduce((s, d) => s + d.fd.x, 0) / hostiles.length;
+      const hy = hostiles.reduce((s, d) => s + d.fd.y, 0) / hostiles.length;
+      const awayAngle = Math.atan2(cx - hx, cy - hy);
+      if (Math.abs(avgHdg - awayAngle) < 0.5) patterns.push({ type: "RETREAT", desc: "Fleet retreating from hostiles" });
+    }
+    // Deduplicate vs last analysis
+    const newPatterns = patterns.filter(p => !this.lastPatterns.some(lp => lp.type === p.type));
+    this.lastPatterns = patterns;
+    for (const p of newPatterns) { p.timestamp = Date.now(); this.events.push(p); }
+    // Keep last 20 events
+    if (this.events.length > 20) this.events = this.events.slice(-20);
+    return newPatterns;
+  }
+  findClusters(drones, radius) {
+    const visited = new Set(); const clusters = [];
+    for (const d of drones) {
+      if (visited.has(d.id)) continue;
+      const cluster = [d]; visited.add(d.id); const queue = [d];
+      while (queue.length) { const cur = queue.shift(); for (const o of drones) { if (visited.has(o.id)) continue; if (Math.hypot(cur.fd.x - o.fd.x, cur.fd.y - o.fd.y) < radius) { visited.add(o.id); cluster.push(o); queue.push(o); } } }
+      clusters.push(cluster);
+    }
+    return clusters;
+  }
+  circularStdDev(angles) {
+    if (angles.length < 2) return 360;
+    const rads = angles.map(a => a * DEG);
+    const s = rads.reduce((acc, r) => acc + Math.sin(r), 0) / rads.length;
+    const c = rads.reduce((acc, r) => acc + Math.cos(r), 0) / rads.length;
+    const R = Math.sqrt(s * s + c * c);
+    return R > 0.999 ? 0 : Math.sqrt(-2 * Math.log(Math.max(0.001, R))) / DEG;
+  }
+  getRecent(maxAge = 8000) { return this.events.filter(e => Date.now() - e.timestamp < maxAge); }
 }
 
 // ═══════════════════════════════════════════
@@ -185,7 +299,7 @@ class MissionPhaseEngine {
 // ═══════════════════════════════════════════
 // RADAR PPI — phosphor persistence effect
 // ═══════════════════════════════════════════
-function RadarPPI({ drones, threats, waypoints, radarRange, selectedId, onSelect, onAddWaypoint, wind }) {
+function RadarPPI({ drones, threats, waypoints, radarRange, selectedId, onSelect, onAddWaypoint, wind, graphOverlay, kg }) {
   const cvRef = useRef(null);
   const swRef = useRef(0);
   const cRef = useRef(new Map());
@@ -223,6 +337,51 @@ function RadarPPI({ drones, threats, waypoints, radarRange, selectedId, onSelect
       ctx.strokeStyle = "rgba(0,220,100,0.12)"; ctx.lineWidth = 0.5;
       ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke();
+
+      // Graph overlay
+      if (graphOverlay && kg) {
+        // Sector grid (4x4, 200m each, centered on origin)
+        ctx.strokeStyle = "rgba(0,180,80,0.04)"; ctx.lineWidth = 0.5; ctx.setLineDash([4, 4]);
+        for (let i = 1; i < 4; i++) {
+          const gx = cx + ((i * 200 - 400) / radarRange) * R;
+          ctx.beginPath(); ctx.moveTo(gx, cy - R); ctx.lineTo(gx, cy + R); ctx.stroke();
+          const gy = cy - ((i * 200 - 400) / radarRange) * R;
+          ctx.beginPath(); ctx.moveTo(cx - R, gy); ctx.lineTo(cx + R, gy); ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        // Visited sectors: green tint
+        const sectors = kg.query("sector");
+        for (const s of sectors) {
+          if (!s.data.visitCount) continue;
+          const sx1 = cx + (s.data.x / radarRange) * R, sy1 = cy - ((s.data.y + 200) / radarRange) * R;
+          const sw2 = (200 / radarRange) * R, sh2 = (200 / radarRange) * R;
+          ctx.fillStyle = `rgba(0,180,80,${Math.min(0.08, s.data.visitCount * 0.002)})`;
+          ctx.fillRect(sx1, sy1 - sh2, sw2, sh2);
+        }
+        // Proximity edges
+        const proxEdges = kg.edges.filter(e => e.relation === "proximity");
+        for (const e of proxEdges) {
+          const d1 = drones.find(d => d.id === e.from), d2 = drones.find(d => d.id === e.to);
+          if (!d1 || !d2) continue;
+          const x1 = cx + (d1.fd.x / radarRange) * R, y1 = cy - (d1.fd.y / radarRange) * R;
+          const x2 = cx + (d2.fd.x / radarRange) * R, y2 = cy - (d2.fd.y / radarRange) * R;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+          ctx.strokeStyle = "rgba(0,200,255,0.15)"; ctx.lineWidth = 0.5; ctx.stroke();
+        }
+        // Detected edges (drone → threat)
+        const detEdges = kg.edges.filter(e => e.relation === "detected");
+        const shown = new Set();
+        for (const e of detEdges) {
+          const key = `${e.from}-${e.to}`;
+          if (shown.has(key)) continue; shown.add(key);
+          const d1 = drones.find(d => d.id === e.from), tn = kg.nodes.get(e.to);
+          if (!d1 || !tn) continue;
+          const x1 = cx + (d1.fd.x / radarRange) * R, y1 = cy - (d1.fd.y / radarRange) * R;
+          const x2 = cx + (tn.data.x / radarRange) * R, y2 = cy - (tn.data.y / radarRange) * R;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+          ctx.strokeStyle = "rgba(255,60,60,0.2)"; ctx.lineWidth = 0.5; ctx.setLineDash([2, 3]); ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
 
       // Sweep fan + line
       ctx.save(); ctx.translate(cx, cy);
@@ -304,7 +463,7 @@ function RadarPPI({ drones, threats, waypoints, radarRange, selectedId, onSelect
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [drones, threats, waypoints, radarRange, selectedId, wind]);
+  }, [drones, threats, waypoints, radarRange, selectedId, wind, graphOverlay, kg]);
 
   return <canvas ref={cvRef} width={440} height={440} onClick={(e) => {
     const r = e.target.getBoundingClientRect(), sc = 440 / r.width;
@@ -852,7 +1011,15 @@ export default function DroneVerse() {
   const [windSpd, setWindSpd] = useState(0);
   const bogeyCounter = useRef(0);
   const phaseRef = useRef(null);
-  const [phaseInfo, setPhaseInfo] = useState(null); // { name, briefing, idx, total, objectives, status }
+  const [phaseInfo, setPhaseInfo] = useState(null);
+  const kgRef = useRef(null);
+  const edRef = useRef(null);
+  const tickRef = useRef(0);
+  const [emergenceFeed, setEmergenceFeed] = useState([]);
+  const [graphStats, setGraphStats] = useState(null);
+  const [showGraphOverlay, setShowGraphOverlay] = useState(false);
+  const [aiDebrief, setAiDebrief] = useState(null); // null | "loading" | string
+  const [showAiModal, setShowAiModal] = useState(false); // { name, briefing, idx, total, objectives, status }
 
   const log = useCallback((m, l = "info") => setLogs(p => [{ m, l, t: Date.now() }, ...p].slice(0, 40)), []);
 
@@ -880,7 +1047,19 @@ export default function DroneVerse() {
     }
     swRef.current = s; setMis({ ...m, threats: [...m.threats], waypoints: [...m.waypoints] });
     setRun(true); setElapsed(0); setSel(null); setTel([]);
-    setWindDir(0); setWindSpd(0); bogeyCounter.current = 0;
+    setWindDir(0); setWindSpd(0); bogeyCounter.current = 0; tickRef.current = 0;
+    // Knowledge Graph init
+    const kg = new KnowledgeGraph();
+    for (const d of s.drones) kg.addNode(d.id, "drone", d.id, { typeKey: d.typeKey, iff: d.spec.iff });
+    for (const t of s.threats) kg.addNode(`t-${t.x}-${t.y}`, "threat", t.type, { x: t.x, y: t.y, radius: t.radius });
+    for (const w of s.waypoints) kg.addNode(`wp-${w.x}-${w.y}`, "waypoint", `WP(${w.x},${w.y})`, { x: w.x, y: w.y, alt: w.alt });
+    for (let gx = 0; gx < 4; gx++) for (let gy = 0; gy < 4; gy++) {
+      const label = String.fromCharCode(65 + gx) + (gy + 1);
+      kg.addNode(`sec-${gx}-${gy}`, "sector", label, { x: gx * 200 - 400, y: gy * 200 - 400, visitCount: 0 });
+    }
+    kgRef.current = kg;
+    edRef.current = new EmergenceDetector();
+    setEmergenceFeed([]); setGraphStats(null); setAiDebrief(null); setShowAiModal(false); setShowGraphOverlay(false);
     // Phase engine
     if (m.phases) {
       const pe = new MissionPhaseEngine(m.phases);
@@ -957,6 +1136,54 @@ COMBAT
 
 ═══ Generated by DroneVerse v2.1 ═══`;
   }, [mis, run, elapsed]);
+
+  const requestAiDebrief = useCallback(async () => {
+    setAiDebrief("loading"); setShowAiModal(true);
+    try {
+      const drones = swRef.current.drones;
+      const active = drones.filter(d => d.status === "ACTIVE");
+      const avg = fn => active.length ? Math.round(active.reduce((s, d) => s + fn(d), 0) / active.length * 10) / 10 : 0;
+      const topDrones = [...drones].filter(d => d.memory).sort((a, b) => b.memory.experienceScore - a.memory.experienceScore).slice(0, 3);
+      const gs = kgRef.current?.toSummary();
+      const emEvents = edRef.current?.getRecent(30000)?.map(e => `${e.type}: ${e.desc}`) || [];
+      const pe = phaseRef.current;
+      const prompt = `You are a military drone operations analyst for RTR (Real-Time Robotics).
+Analyze this simulation data and write a concise tactical debrief (150-200 words).
+
+MISSION: ${mis?.name || "N/A"} [${mis?.domain || "N/A"}]
+ELAPSED: ${Math.round(elapsed)}s
+${pe ? `PHASE: ${pe.currentPhase + 1}/${pe.phases.length} — ${pe.getCurrentPhase()?.name || "Complete"}` : "Single-phase mission"}
+
+FLEET: ${active.filter(d => d.spec.iff === "FRIENDLY").length} friendly, ${active.filter(d => d.spec.iff === "HOSTILE").length} hostile, ${drones.filter(d => d.status === "ELIMINATED").length} eliminated
+AVG BATTERY: ${avg(d => d.fd.battery)}% | AVG SIGNAL: ${avg(d => d.fd.signal)}%
+
+${gs ? `KNOWLEDGE GRAPH: ${gs.nodeCount} nodes, ${gs.edgeCount} edges. Types: ${JSON.stringify(gs.types)}` : ""}
+
+EMERGENCE PATTERNS: ${emEvents.join(", ") || "None detected"}
+
+TOP AGENTS:
+${topDrones.map(d => `${d.id} (${d.typeKey}): XP ${Math.round(d.memory.experienceScore)}, ${d.memory.eliminationCount} kills, sectors ${d.memory.sectorsVisited.size}/16, personality: aggression=${d.memory.personality.aggression.toFixed(1)} autonomy=${d.memory.personality.autonomy.toFixed(1)} teamwork=${d.memory.personality.teamwork.toFixed(1)}`).join("\n")}
+
+THREATS: ${swRef.current.threats.map(t => `${t.type} at (${t.x},${t.y})`).join(", ") || "None"}
+
+Write the debrief in English with:
+1. Situation summary (2-3 sentences)
+2. Key tactical observations (what happened, why)
+3. Swarm behavior assessment (any emergent patterns?)
+4. Recommendations for next sortie
+Format as plain text, no markdown.`;
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!resp.ok) throw new Error(`API ${resp.status}`);
+      const data = await resp.json();
+      setAiDebrief(data.content?.[0]?.text || "No response content");
+    } catch (err) {
+      setAiDebrief(`AI debrief unavailable (${err.message}) — showing standard report:\n\n${generateReport()}`);
+    }
+  }, [mis, elapsed, generateReport]);
 
   const compassLabel = (deg) => {
     const dirs = ["N","NE","E","SE","S","SW","W","NW"];
@@ -1036,7 +1263,7 @@ COMBAT
   useEffect(() => {
     if (!run) return;
     const iv = setInterval(() => {
-      swRef.current.update(0.2); setTick(t => t + 1); setElapsed(e => {
+      swRef.current.update(0.2); tickRef.current++; setTick(t => t + 1); setElapsed(e => {
         const newE = e + 0.2;
         // Phase engine integration
         const pe = phaseRef.current;
@@ -1079,6 +1306,58 @@ COMBAT
         if (active.length) {
           const a = fn => active.reduce((s, d) => s + fn(d), 0) / active.length;
           setTel(p => [...p.slice(-50), { t: p.length, bat: Math.round(a(d => d.fd.battery) * 10) / 10, sig: Math.round(a(d => d.fd.signal) * 10) / 10, alt: Math.round(a(d => d.fd.alt)), spd: Math.round(a(d => d.fd.speed) * 10) / 10 }]);
+        }
+      }
+      // Knowledge Graph updates (every 10 ticks = 0.5s)
+      const tk = tickRef.current;
+      const kg = kgRef.current;
+      if (kg && tk % 10 === 0) {
+        const allDr = swRef.current.drones;
+        kg.removeEdges("proximity");
+        for (const d of allDr) {
+          if (d.status !== "ACTIVE") continue;
+          kg.updateNode(d.id, { x: d.fd.x, y: d.fd.y, battery: d.fd.battery, status: d.status });
+          // Sector visit tracking
+          const gx = Math.min(3, Math.max(0, Math.floor((d.fd.x + 400) / 200)));
+          const gy = Math.min(3, Math.max(0, Math.floor((d.fd.y + 400) / 200)));
+          const secId = `sec-${gx}-${gy}`;
+          const sec = kg.nodes.get(secId);
+          if (sec) {
+            sec.data.visitCount = (sec.data.visitCount || 0) + 1;
+            sec.data.lastVisit = Date.now();
+          }
+          // Proximity edges
+          for (const o of allDr) {
+            if (o.id <= d.id || o.status !== "ACTIVE") continue;
+            if (Math.hypot(d.fd.x - o.fd.x, d.fd.y - o.fd.y) < 50) kg.addEdge(d.id, o.id, "proximity");
+          }
+          // Threat detection edges
+          for (const t of swRef.current.threats) {
+            if (Math.hypot(d.fd.x - t.x, d.fd.y - t.y) < t.radius * 1.5) {
+              const tid = `t-${t.x}-${t.y}`;
+              if (!kg.edges.some(e => e.from === d.id && e.to === tid && e.relation === "detected")) kg.addEdge(d.id, tid, "detected");
+            }
+          }
+          // Low battery event
+          if (d.fd.battery < 15 && !kg.nodes.has(`evt-lowbat-${d.id}`)) {
+            kg.addNode(`evt-lowbat-${d.id}`, "event", `Low battery: ${d.id}`, { timestamp: Date.now() });
+            kg.addEdge(`evt-lowbat-${d.id}`, d.id, "involves");
+          }
+        }
+        setGraphStats(kg.toSummary());
+      }
+      // Emergence detection (every 20 ticks = 1s)
+      const ed = edRef.current;
+      if (ed && tk % 20 === 0) {
+        const patterns = ed.analyze(swRef.current.drones);
+        if (patterns.length > 0) {
+          for (const p of patterns) {
+            setLogs(prev => [{ m: `EMERGENCE: ${p.type} — ${p.desc}`, l: "info", t: Date.now() }, ...prev].slice(0, 40));
+            if (kg) kg.addEvent(`${p.type}: ${p.desc}`, swRef.current.drones.filter(d => d.status === "ACTIVE" && d.spec.iff === "FRIENDLY").map(d => d.id));
+          }
+          setEmergenceFeed(ed.getRecent());
+        } else {
+          setEmergenceFeed(ed.getRecent());
         }
       }
     }, 50);
@@ -1167,12 +1446,23 @@ COMBAT
                   <button onClick={formUp} style={{ padding: "5px 0", borderRadius: 5, border: "1px solid #00e5ff40", background: "#00e5ff12", color: "#00e5ff", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><CircleDot size={9} /> FORM UP</button>
                 </div>
               </div>
+              {/* Knowledge Graph Stats */}
+              {graphStats && <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><GitBranch size={9} /> KNOWLEDGE GRAPH</div>
+                <div style={{ fontSize: 8, color: "#20c080", lineHeight: 1.5 }}>
+                  Nodes: {graphStats.nodeCount} | Edges: {graphStats.edgeCount}<br/>
+                  {Object.entries(graphStats.types).map(([t, c]) => `${t}: ${c}`).join(" | ")}<br/>
+                  {graphStats.mostVisited && <>Top: {graphStats.mostVisited} ({graphStats.mostVisitCount})<br/></>}
+                  {graphStats.leastVisited && <>Low: {graphStats.leastVisited} ({graphStats.leastVisitCount})</>}
+                </div>
+              </div>}
             </>}
           </div>
           <div style={{ padding: 8, borderTop: "1px solid #222", display: "flex", gap: 4 }}>
             <button onClick={() => setRun(!run)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: `1px solid ${run ? "#00e5ff60" : "#222"}`, background: run ? "#00e5ff25" : "#0a0a0a", color: run ? "#00e5ff" : "#90b0d0", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}>{run ? <Pause size={12} /> : <Play size={12} />}{run ? "PAUSE" : "RUN"}</button>
             {mis && <button onClick={() => setShowReport(true)} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #00e5ff40", background: "#00e5ff10", color: "#00e5ff", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center" }}><FileText size={12} /></button>}
-            <button onClick={() => { swRef.current = new SwarmController(); setMis(null); setRun(false); setElapsed(0); setSel(null); setTel([]); setLogs([]); setShowReport(false); setSideTab("fleet"); setWindDir(0); setWindSpd(0); setCamMode("orbit"); phaseRef.current = null; setPhaseInfo(null); }} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #222", background: "#0a0a0a", color: "#7090b0", cursor: "pointer", fontFamily: "inherit" }}><RotateCcw size={12} /></button>
+            {mis && <button onClick={requestAiDebrief} disabled={aiDebrief === "loading"} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #a855f740", background: aiDebrief === "loading" ? "#a855f725" : "#a855f710", color: "#a855f7", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", fontSize: 8 }}>{aiDebrief === "loading" ? <span style={{ animation: "pulse 1s infinite" }}>...</span> : <Cpu size={12} />}</button>}
+            <button onClick={() => { swRef.current = new SwarmController(); setMis(null); setRun(false); setElapsed(0); setSel(null); setTel([]); setLogs([]); setShowReport(false); setSideTab("fleet"); setWindDir(0); setWindSpd(0); setCamMode("orbit"); phaseRef.current = null; setPhaseInfo(null); kgRef.current = null; edRef.current = null; setEmergenceFeed([]); setGraphStats(null); setShowGraphOverlay(false); setAiDebrief(null); setShowAiModal(false); }} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #222", background: "#0a0a0a", color: "#7090b0", cursor: "pointer", fontFamily: "inherit" }}><RotateCcw size={12} /></button>
           </div>
         </div>
         {/* CENTER */}
@@ -1197,11 +1487,18 @@ COMBAT
                   <button key={md} onClick={() => setCamMode(md)} style={{ padding: "4px 6px", borderRadius: 4, border: "none", cursor: "pointer", background: camMode === md ? "#00e5ff30" : "#000000aa", color: camMode === md ? "#00e5ff" : "#7090b0", fontSize: 7, fontFamily: "inherit", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}><Icon size={10} />{md.toUpperCase()}</button>
                 ))}
               </div>
+              {emergenceFeed.length > 0 && <div style={{ position: "absolute", bottom: 50, left: 8, background: "#0c1525ee", border: "1px solid #a855f730", borderRadius: 6, padding: "5px 8px", maxWidth: 250, zIndex: 2 }}>
+                <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 3, display: "flex", alignItems: "center", gap: 3 }}><Brain size={8} /> EMERGENCE</div>
+                {emergenceFeed.slice(0, 4).map((e, i) => <div key={i} style={{ fontSize: 8, color: "#c0a0e0", marginBottom: 1, opacity: Math.max(0.3, 1 - (Date.now() - e.timestamp) / 8000) }}>⚡ {e.type}: {e.desc}</div>)}
+              </div>}
             </div>}
             {(vw === "split" || vw === "radar") && <div style={{ flex: vw === "radar" ? 1 : 0, flexBasis: vw === "split" ? 380 : "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#000000", position: "relative", padding: 8 }}>
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: "#000000cc", padding: "3px 8px", borderRadius: 4, fontSize: 9, color: "#20c080" }}><Radar size={10} /> PPI RADAR</div>
-              <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 3 }}>{[200, 400, 600, 800].map(r => <button key={r} onClick={() => setRng(r)} style={{ padding: "2px 6px", borderRadius: 3, border: "none", cursor: "pointer", background: rng === r ? "#00aa60" : "#111", color: rng === r ? "#00ff80" : "#40a070", fontSize: 8, fontFamily: "inherit", fontWeight: 600 }}>{r}</button>)}</div>
-              <RadarPPI drones={dr} threats={th} waypoints={wp} radarRange={rng} selectedId={sel} onSelect={setSel} onAddWaypoint={addWaypoint} wind={{ dir: windDir, speed: windSpd }} />
+              <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 3 }}>
+                <button onClick={() => setShowGraphOverlay(!showGraphOverlay)} style={{ padding: "2px 6px", borderRadius: 3, border: "none", cursor: "pointer", background: showGraphOverlay ? "#a855f730" : "#111", color: showGraphOverlay ? "#a855f7" : "#40a070", fontSize: 8, fontFamily: "inherit", fontWeight: 600 }}><GitBranch size={9} /></button>
+                {[200, 400, 600, 800].map(r => <button key={r} onClick={() => setRng(r)} style={{ padding: "2px 6px", borderRadius: 3, border: "none", cursor: "pointer", background: rng === r ? "#00aa60" : "#111", color: rng === r ? "#00ff80" : "#40a070", fontSize: 8, fontFamily: "inherit", fontWeight: 600 }}>{r}</button>)}
+              </div>
+              <RadarPPI drones={dr} threats={th} waypoints={wp} radarRange={rng} selectedId={sel} onSelect={setSel} onAddWaypoint={addWaypoint} wind={{ dir: windDir, speed: windSpd }} graphOverlay={showGraphOverlay} kg={kgRef.current} />
             </div>}
           </div>
           {/* BOTTOM */}
@@ -1210,6 +1507,16 @@ COMBAT
               <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Crosshair size={10} /> {sd ? "TRACK" : "NO TRK"}</div>
               {sd ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 10px" }}>
                 {[[Navigation,"HDG",`${Math.round(sd.fd.hdg)}°`,"#c0d0e0"],[Gauge,"SPD",`${sd.fd.speed.toFixed(1)}`,"#00e5ff"],[ArrowUpRight,"ALT",`${Math.round(sd.fd.alt)}m`,"#00e878"],[Activity,"VS",`${sd.fd.vs > 0 ? "+" : ""}${sd.fd.vs.toFixed(1)}`,(sd.fd.vs > 0 ? "#00e878" : "#ff3b5c")],[Battery,"BAT",`${Math.round(sd.fd.battery)}%`,(sd.fd.battery < 25 ? "#ff3b5c" : "#00e878")],[Signal,"SIG",`${Math.round(sd.fd.signal)}%`,(sd.fd.signal < 60 ? "#ffb020" : "#00e5ff")],[Compass,"BNK",`${Math.round(sd.fd.bank)}°`,"#a855f7"],[Shield,"IFF",sd.spec.iff,(sd.spec.iff === "HOSTILE" ? "#ff3b5c" : "#00e878")]].map(([I,k,v,c]) => <div key={k} style={{ display: "flex", alignItems: "center", gap: 4 }}><I size={9} color="#5580a0" /><span style={{ fontSize: 8, color: "#7090b0", width: 26 }}>{k}</span><span style={{ fontSize: 10, fontWeight: 600, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</span></div>)}
+              {sd.memory && <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #222", paddingTop: 3, marginTop: 2 }}>
+                <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 2, display: "flex", alignItems: "center", gap: 3 }}><Brain size={7} /> AGENT MEMORY</div>
+                <div style={{ fontSize: 8, color: "#7090b0", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+                  <span>XP:<b style={{color:"#a855f7"}}>{Math.round(sd.memory.experienceScore)}</b></span>
+                  <span>Sec:<b style={{color:"#00e5ff"}}>{sd.memory.sectorsVisited.size}/16</b></span>
+                  <span>Dist:<b style={{color:"#00e878"}}>{(sd.memory.distanceTraveled/1000).toFixed(1)}km</b></span>
+                  <span>Kills:<b style={{color:"#ff3b5c"}}>{sd.memory.eliminationCount}</b></span>
+                  <span style={{fontSize:7}}>A:{sd.memory.personality.aggression.toFixed(1)} U:{sd.memory.personality.autonomy.toFixed(1)} T:{sd.memory.personality.teamwork.toFixed(1)}</span>
+                </div>
+              </div>}
               </div> : <div style={{ fontSize: 9, color: "#333", padding: 8 }}>Click to track</div>}
             </div>
             <div style={{ flex: 1, display: "flex", gap: 1 }}>
@@ -1242,7 +1549,22 @@ COMBAT
           </div>
         </div>
       </div>}
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#222;border-radius:3px}button:hover{filter:brightness(1.15)}`}</style>
+      {showAiModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setShowAiModal(false)}>
+        <div style={{ background: "#0c1525ee", border: "1px solid #a855f740", borderRadius: 12, maxWidth: 540, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#a855f7" }}><Cpu size={14} /> AI TACTICAL DEBRIEF</div>
+            <button onClick={() => setShowAiModal(false)} style={{ background: "none", border: "none", color: "#7090b0", cursor: "pointer", padding: 4 }}><X size={16} /></button>
+          </div>
+          {aiDebrief === "loading" ? <div style={{ fontSize: 11, color: "#a855f7", padding: 20, textAlign: "center" }}>Analyzing simulation data...</div>
+          : <pre style={{ fontSize: 10, color: "#c0d0e0", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "#000", borderRadius: 8, padding: 14, border: "1px solid #222", marginBottom: 14, maxHeight: 400, overflow: "auto" }}>{aiDebrief}</pre>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { if (aiDebrief && aiDebrief !== "loading") navigator.clipboard.writeText(aiDebrief); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: "1px solid #a855f740", background: "#a855f715", color: "#a855f7", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><Copy size={12} /> COPY</button>
+            <button onClick={() => setShowAiModal(false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: "1px solid #333", background: "#0a0a0a", color: "#7090b0", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><X size={12} /> CLOSE</button>
+          </div>
+          <div style={{ fontSize: 7, color: "#556070", marginTop: 8, textAlign: "center" }}>Generated by Claude — {new Date().toLocaleString()}</div>
+        </div>
+      </div>}
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#222;border-radius:3px}button:hover{filter:brightness(1.15)}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
     </div>
   );
 }
