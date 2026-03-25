@@ -12,6 +12,18 @@ import { XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from "recharts";
 const PI2 = Math.PI * 2;
 const DEG = Math.PI / 180;
 
+async function callAI(messages, maxTokens = 2000) {
+  const res = await fetch('/api/ai', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, max_tokens: maxTokens }),
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.content?.[0]?.text || null;
+}
+
 const VI = {
   missions: "NHIỆM VỤ", fleet: "ĐỘI HÌNH", god: "CHỈ HUY", track: "THEO DÕI", noTrk: "CHƯA CHỌN",
   log: "NHẬT KÝ", battery: "PIN", altitude: "ĐỘ CAO", speed: "TỐC ĐỘ", signal: "TÍN HIỆU",
@@ -1256,13 +1268,7 @@ export default function DroneVerse() {
     setScenarioLoading(true);
     try {
       const prompt = `Bạn là chuyên gia tác chiến drone của Quân đội Nhân dân Việt Nam, chuyên về cứu hộ cứu nạn.\n\nTình huống: ${scenarioInput}\nLoại: ${scenarioType}\n\nTạo kịch bản mô phỏng dưới dạng JSON thuần (KHÔNG markdown, KHÔNG \`\`\`):\n{"missionName":"tên tiếng Việt","briefing":"mô tả 2 câu","domain":"RESCUE","phases":[{"name":"tên phase","briefing":"mô tả","drones":[{"id":"XX-1","type":"HERA-S","x":0,"y":-20,"alt":150,"hdg":0}],"waypoints":[{"x":200,"y":150,"alt":120}],"threats":[{"x":200,"y":150,"radius":80,"type":"Vùng ngập sâu"}],"objectives":["mục tiêu 1"],"transitionType":"time","transitionTime":20}]}\n\nQuy tắc: HERA-S trinh sát nhanh, HERA-C vận chuyển chậm, VEGA-X hộ tống. 3-4 phases. 8-16 drones. Origin (0,0) = sở chỉ huy. Vùng thiên tai 200-350m.`;
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
-      });
-      if (!resp.ok) throw new Error(`API ${resp.status}`);
-      const data = await resp.json();
-      let text = data.content?.[0]?.text || "";
+      let text = await callAI([{ role: "user", content: prompt }], 2000) || "";
       // Strip markdown code blocks if present
       text = text.replace(/```json?\s*/g, "").replace(/```\s*/g, "").trim();
       const scenario = JSON.parse(text);
@@ -1301,13 +1307,7 @@ export default function DroneVerse() {
       const weakest = drones.filter(d => d.spec.iff === "FRIENDLY").sort((a, b) => a.fd.battery - b.fd.battery)[0];
       const pe = phaseRef.current;
       const prompt = `Bạn là cố vấn tác chiến drone QĐND Việt Nam.\n\nNhiệm vụ: ${mis?.name}\nPhase: ${pe ? `${pe.currentPhase+1}/${pe.phases.length} — ${pe.getCurrentPhase()?.name}` : "Đơn phase"}\nFleet: ${drones.filter(d=>d.spec.iff==="FRIENDLY").length} drone, ${drones.filter(d=>d.spec.iff==="HOSTILE").length} đối phương\nPin TB: ${Math.round(drones.reduce((s,d)=>s+d.fd.battery,0)/Math.max(1,drones.length))}%\nGió: ${windSpd}m/s\nĐe dọa: ${swRef.current.threats.map(t=>t.type).join(", ")||"Không"}\nDrone yếu nhất: ${weakest?`${weakest.id} (pin ${Math.round(weakest.fd.battery)}%)`:"N/A"}\n\n3 khuyến nghị chiến thuật ngắn (tiếng Việt). JSON: {"advice":["1","2","3"]}`;
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST", headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
-      });
-      if (!resp.ok) throw new Error(`API ${resp.status}`);
-      const data = await resp.json();
-      let text = data.content?.[0]?.text || "{}";
+      let text = await callAI([{ role: "user", content: prompt }], 500) || "{}";
       text = text.replace(/```json?\s*/g, "").replace(/```\s*/g, "").trim();
       const parsed = JSON.parse(text);
       setAiAdvice(parsed.advice || ["Không có khuyến nghị"]);
@@ -1415,14 +1415,8 @@ Write the debrief in English with:
 3. Swarm behavior assessment (any emergent patterns?)
 4. Recommendations for next sortie
 Format as plain text, no markdown.`;
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
-      });
-      if (!resp.ok) throw new Error(`API ${resp.status}`);
-      const data = await resp.json();
-      setAiDebrief(data.content?.[0]?.text || "No response content");
+      const text = await callAI([{ role: "user", content: prompt }], 1000);
+      setAiDebrief(text || "No response content");
     } catch (err) {
       setAiDebrief(`AI debrief unavailable (${err.message}) — showing standard report:\n\n${generateReport()}`);
     }
