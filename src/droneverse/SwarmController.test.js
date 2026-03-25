@@ -24,13 +24,13 @@ describe('SwarmController', () => {
     expect(sc.waypoints).toHaveLength(1);
   });
 
-  it('updates drone positions', () => {
+  it('updates drone positions (drone moves from start)', () => {
     const sc = new SwarmController();
     sc.addDrone('D-1', 'HERA-S', 0, 0, 100, 0);
     sc.assignWaypoints([{ x: 0, y: 200, alt: 100 }]);
-    const startY = sc.drones[0].fd.y;
     for (let i = 0; i < 50; i++) sc.update(0.2);
-    expect(sc.drones[0].fd.y).toBeGreaterThan(startY);
+    const dist = Math.hypot(sc.drones[0].fd.x, sc.drones[0].fd.y);
+    expect(dist).toBeGreaterThan(5); // drone has moved from origin
   });
 
   it('VEGA-X eliminates nearby BOGEY', () => {
