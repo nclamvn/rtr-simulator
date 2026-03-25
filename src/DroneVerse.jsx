@@ -1895,7 +1895,7 @@ Format as plain text, no markdown.`;
                 <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: "rgba(0,0,0,0.7)", padding: "4px 10px", borderRadius: 4, fontSize: 11, color: "#00e5ff", zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ VỆ TINH</div>
               </div>
               {/* LOG PANEL 40% */}
-              <div style={{ flex: 2, display: "flex", flexDirection: "column", background: T.bgPanel, borderLeft: `1px solid ${T.border}`, overflow: "hidden" }}>
+              <div style={{ flex: 2, display: "flex", flexDirection: "column", background: T.bgPanel, borderLeft: `1px solid ${T.border}`, overflow: "hidden", minHeight: 0 }}>
                 {/* Mission clock + status */}
                 <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ fontSize: 20, fontWeight: 700, color: elapsed > 300 ? T.danger : T.accent, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" }}>T+{String(Math.floor(elapsed / 60)).padStart(2, "0")}:{String(Math.floor(elapsed % 60)).padStart(2, "0")}</div>
@@ -1919,7 +1919,7 @@ Format as plain text, no markdown.`;
                   </div>}
                 </div>}
                 {/* Realtime Log */}
-                <div ref={el => { if (el) el.scrollTop = el.scrollHeight; }} style={{ flex: 1, overflow: "auto", padding: "8px 10px" }}>
+                <div ref={el => { if (el) el.scrollTop = el.scrollHeight; }} style={{ flex: 1, overflow: "auto", padding: "8px 10px", minHeight: 0 }}>
                   <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><Activity size={12} /> {VI.log}</div>
                   {logs.map((l, i) => <div key={i} style={{
                     fontSize: 12, padding: "6px 10px", marginBottom: 4, borderRadius: 6, lineHeight: 1.6,
