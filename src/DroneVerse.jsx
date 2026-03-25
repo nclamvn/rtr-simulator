@@ -1200,15 +1200,15 @@ Format as plain text, no markdown.`;
           </div>}
           <div style={{ flex: 1, display: "flex", gap: 1, padding: 1, background: T.bgCard, minHeight: 0, overflow: "hidden" }}>
             {vw === "map" && <div style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
-              {/* MAP 60% — absolute fill */}
-              <div style={{ width: "60%", position: "relative" }}>
+              {/* MAP 70% */}
+              <div style={{ width: "70%", position: "relative" }}>
                 <div style={{ position: "absolute", inset: 0 }}>
                   <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} victims={mis?.victims} />
                 </div>
                 <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: "rgba(0,0,0,0.7)", padding: "4px 10px", borderRadius: 4, fontSize: 12, color: "#00e5ff", zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ VỆ TINH</div>
               </div>
-              {/* LOG PANEL 40% — absolute fill, column layout */}
-              <div style={{ width: "40%", display: "flex", flexDirection: "column", background: T.bgPanel, borderLeft: `1px solid ${T.border}` }}>
+              {/* LOG PANEL 30% */}
+              <div style={{ width: "30%", display: "flex", flexDirection: "column", background: T.bgPanel, borderLeft: `1px solid ${T.border}` }}>
                 {/* Clock — fixed */}
                 <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
                   <div style={{ fontSize: 20, fontWeight: 700, color: elapsed > 300 ? T.danger : T.accent, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" }}>T+{String(Math.floor(elapsed / 60)).padStart(2, "0")}:{String(Math.floor(elapsed % 60)).padStart(2, "0")}</div>
