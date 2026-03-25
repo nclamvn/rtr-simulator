@@ -1,4 +1,6 @@
 import express from 'express';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -8,12 +10,26 @@ const PORT = process.env.PORT || 3001;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
+// Security headers
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// Rate limiting — 100 AI requests per 15 minutes per IP
+const aiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, message: { error: 'Rate limit exceeded — try again later' } });
+
 app.use(express.json({ limit: '1mb' }));
+
+// Request logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    if (req.path !== '/health') console.log(`${new Date().toISOString()} ${req.method} ${req.path} ${res.statusCode} ${Date.now() - start}ms`);
+  });
+  next();
+});
 
 // Serve built frontend
 app.use(express.static(join(__dirname, 'dist')));
 
-// Call Anthropic
 async function callAnthropic(messages, maxTokens) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -26,7 +42,6 @@ async function callAnthropic(messages, maxTokens) {
   return data;
 }
 
-// Call OpenAI
 async function callOpenAI(messages, maxTokens) {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -36,13 +51,25 @@ async function callOpenAI(messages, maxTokens) {
   if (!res.ok) throw new Error(`OpenAI ${res.status}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error.message || 'OpenAI error');
-  // Normalize to Anthropic response format
   return { content: [{ text: data.choices?.[0]?.message?.content || '' }] };
 }
 
-// AI Proxy endpoint — Anthropic first, fallback OpenAI
-app.post('/api/ai', async (req, res) => {
+// AI Proxy — rate limited + input validated
+app.post('/api/ai', aiLimiter, async (req, res) => {
   const { messages, max_tokens = 2000 } = req.body;
+
+  // Input validation
+  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages array required' });
+  }
+  if (typeof max_tokens !== 'number' || max_tokens < 1 || max_tokens > 4000) {
+    return res.status(400).json({ error: 'max_tokens must be 1-4000' });
+  }
+  for (const m of messages) {
+    if (!m.role || !m.content || typeof m.content !== 'string') {
+      return res.status(400).json({ error: 'Each message must have role and content string' });
+    }
+  }
 
   // Try Anthropic first
   if (ANTHROPIC_KEY) {
@@ -64,21 +91,18 @@ app.post('/api/ai', async (req, res) => {
     }
   }
 
-  // Both failed or no keys
   if (!ANTHROPIC_KEY && !OPENAI_KEY) {
     return res.status(500).json({ error: 'No API keys configured' });
   }
   res.status(502).json({ error: 'All AI providers unavailable' });
 });
 
-// Health check
 app.get('/health', (req, res) => res.json({
   status: 'ok',
   providers: { anthropic: !!ANTHROPIC_KEY, openai: !!OPENAI_KEY },
   timestamp: Date.now(),
 }));
 
-// SPA fallback
 app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 
 app.listen(PORT, () => {
