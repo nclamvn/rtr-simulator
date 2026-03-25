@@ -924,9 +924,127 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, 
 }
 
 // ═══════════════════════════════════════════
+// GPS ↔ METER CONVERSION
+// ═══════════════════════════════════════════
+function gpsToM(lng, lat, cLng, cLat) {
+  const mLat = 111320, mLng = 111320 * Math.cos(cLat * DEG);
+  return { x: Math.round((lng - cLng) * mLng), y: Math.round((lat - cLat) * mLat) };
+}
+
+// ═══════════════════════════════════════════
+// TÂY HOÀ MISSION DATA
+// ═══════════════════════════════════════════
+const TH_CENTER = [109.253, 12.752];
+const TH_C = (lng, lat) => gpsToM(lng, lat, TH_CENTER[0], TH_CENTER[1]);
+
+const TH_VICTIMS = [
+  { pos: [109.24, 12.755], name: "Thôn Phước Thành", priority: 1, priorityLabel: "P1 — CỨU NGAY", color: "#ff2040", people: 45,
+    detail: "12 người mắc kẹt nước xiết, 3 trẻ <5 tuổi, 2 bất tỉnh, 8 người già" },
+  { pos: [109.26, 12.748], name: "Thôn Trung Hoà", priority: 1, priorityLabel: "P1 — CỨU NGAY", color: "#ff2040", people: 60,
+    detail: "Kè sập 100m, 1 thai phụ 8 tháng, 5 chảy máu, 15 người già >70" },
+  { pos: [109.22, 12.760], name: "Xóm cầu Dinh Ông", priority: 2, priorityLabel: "P2 — CỨU SỚM", color: "#ff8c00", people: 30,
+    detail: "Trên mái nhà, kiệt sức 18h, thiếu nước, 4 bị thương nhẹ" },
+  { pos: [109.28, 12.742], name: "Kè sông phía Nam", priority: 2, priorityLabel: "P2 — CỨU SỚM", color: "#ff8c00", people: 25,
+    detail: "Gò đất cao, 2 trẻ sốt cao, thiếu ăn 24h" },
+  { pos: [109.25, 12.765], name: "Trường TH Tây Hoà", priority: 3, priorityLabel: "P3 — CHỜ ĐƯỢC", color: "#00cc66", people: 40,
+    detail: "Tầng 2 kiên cố, có tổ chức, còn lương thực 12h" },
+];
+
+const TH_LOGS = {
+  1: ["🎖️ LỆNH BỘ QUỐC PHÒNG: Cứu hộ xã Tây Hoà, Phú Yên", "📍 Tình huống: Sông Ba xả lũ 16.100 m³/s, kè sập 100m, nhiều thôn bị cô lập", "🚶 Chiến sĩ di chuyển bộ 2km vượt sạt lở", "🚁 HERA-RECON-01 cất cánh — camera EO/IR", "📡 Link truyền dữ liệu Sở Chỉ Huy: ỔN ĐỊNH"],
+  2: ["🔍 TRINH SÁT — Camera EO quang học + IR nhiệt", "📷 Scan line 1/8 — Bắc xã Tây Hoà", "🌡️ Camera nhiệt phát hiện cụm người Thôn Phước Thành", "⚠️ Ngập sâu 2m khu vực ven sông Ba", "📷 Scan line 4/8 — sạt lở bờ kè 100m", "🌡️ 5 CỤM NẠN NHÂN — tổng ~200 người"],
+  3: ["📊 KẾT QUẢ PHÂN LOẠI:", "🔴 P1 CỨU NGAY: Phước Thành 45 người — nước xiết, trẻ nhỏ, bất tỉnh", "🔴 P1 CỨU NGAY: Trung Hoà 60 người — kè sập, thai phụ, chảy máu", "🟠 P2 CỨU SỚM: Cầu Dinh Ông 30 người — mái nhà, kiệt sức", "🟠 P2 CỨU SỚM: Kè sông Nam 25 người — gò đất, trẻ sốt", "🟢 P3 CHỜ ĐƯỢC: Trường TH 40 người — tầng 2, còn lương thực", "📊 TỔNG: 200 NGƯỜI — P1:105 | P2:55 | P3:40"],
+  4: ["📦 THẢ HÀNG — ƯU TIÊN P1 TRƯỚC", "🔴 CARGO-01 → Phước Thành: Cứu thương + phao cứu sinh", "🔴 CARGO-02 → Trung Hoà: Kit sản khoa + nước + bạt mưa", "✅ P1 HOÀN TẤT — 105 người nguy cấp được cứu trợ", "🟠 CARGO-03 → Cầu Dinh Ông: Nước + lương khô + thuốc", "🟠 CARGO-04 → Kè sông Nam: Lương khô + thuốc hạ sốt", "✅ P2 HOÀN TẤT — 55 người được cứu trợ"],
+  5: ["📡 ĐIỀU PHỐI MẶT ĐẤT", "📍 HERA-RECON-01 lên 300m — relay node", "🚁 GUIDE-01: Tuyến 1 → Phước Thành (tránh sạt lở)", "🚁 GUIDE-02: Tuyến 2 → Trung Hoà (qua cánh đồng)", "📡 Video realtime → lực lượng mặt đất xác nhận tín hiệu"],
+  6: ["✅ NHIỆM VỤ CỨU TRỢ HOÀN TẤT", "📊 KẾT QUẢ: 200 người — 5 điểm — 4 chuyến thả hàng", "📊 P1: 105 người cứu trợ khẩn | P2: 55 người tiếp tế | P3: 40 người chờ", "🚁 Thu hồi fleet — 0 tổn thất"],
+};
+
+// ═══════════════════════════════════════════
 // MISSIONS
 // ═══════════════════════════════════════════
 const MISSIONS = [
+  // ── KỊCH BẢN BỘ QUỐC PHÒNG: TÂY HOÀ ──
+  { id: "tayho_bqp", name: "Cứu hộ Tây Hoà — Kịch bản BQP", domain: "RESCUE", icon: Shield, multi: true,
+    center: TH_CENTER, zoom: 13, victims: TH_VICTIMS, phaseLogs: TH_LOGS,
+    desc: "6 giai đoạn: cất cánh → trinh sát → phân loại → thả hàng → điều phối → thu hồi",
+    drones: [{ id: "HERA-RECON-01", type: "HERA-S", ...TH_C(109.12, 12.72), alt: 100, hdg: 45 }],
+    waypoints: [{ ...TH_C(109.15, 12.73), alt: 100 }, { ...TH_C(109.20, 12.75), alt: 150 }],
+    threats: [{ ...TH_C(109.15, 12.76), radius: 600, type: "Sạt lở đường tiếp cận" }],
+    phases: [
+      { name: "GĐ1: Di chuyển & cất cánh", briefing: "Chiến sĩ vượt 2km sạt lở, drone cất cánh cách Tây Hoà 15km",
+        weather: { windSpeed: 12, windDir: 90 },
+        objectives: [{ id: "th_launch", desc: "Drone cất cánh thành công", check: (dr) => dr.some(d => d.fd.speed > 3) }],
+        transition: (pt) => pt > 30 },
+      { name: "GĐ2: Trinh sát camera kép", briefing: "Camera EO+IR quét toàn bộ xã Tây Hoà — xác định nạn nhân",
+        waypoints: [
+          { ...TH_C(109.22, 12.770), alt: 120 }, { ...TH_C(109.28, 12.770), alt: 120 },
+          { ...TH_C(109.28, 12.760), alt: 120 }, { ...TH_C(109.22, 12.760), alt: 120 },
+          { ...TH_C(109.22, 12.750), alt: 120 }, { ...TH_C(109.28, 12.750), alt: 120 },
+          { ...TH_C(109.28, 12.740), alt: 120 }, { ...TH_C(109.22, 12.740), alt: 120 },
+        ],
+        threats: [
+          { ...TH_C(109.23, 12.750), radius: 800, type: "Ngập sâu 2m — sông Ba tràn bờ" },
+          { ...TH_C(109.26, 12.755), radius: 500, type: "Sạt lở bờ kè" },
+          { ...TH_C(109.20, 12.758), radius: 400, type: "Gió giật cấp 8" },
+        ],
+        objectives: [{ id: "th_scan", desc: "Quét 8/8 scan lines — phát hiện 5 cụm nạn nhân", check: (dr) => { const f=dr.filter(d=>d.status==="ACTIVE"&&d.memory); return f.length>0&&f.reduce((s,d)=>s+d.memory.sectorsVisited.size,0)/f.length>=3; } }],
+        transition: (_, __, ___, os) => os["th_scan"] },
+      { name: "GĐ3: Đánh dấu & phân loại triage", briefing: "5 cụm nạn nhân: P1(105) P2(55) P3(40) — truyền GPS về SCH",
+        spawns: [
+          { id: "HERA-RECON-02", type: "HERA-S", ...TH_C(109.10, 12.78), alt: 80, hdg: 120 },
+          { id: "HERA-RECON-03", type: "HERA-S", ...TH_C(109.11, 12.77), alt: 80, hdg: 115 },
+        ],
+        waypoints: TH_VICTIMS.map(v => ({ ...TH_C(v.pos[0], v.pos[1]), alt: 80 })),
+        objectives: [
+          { id: "th_mark", desc: "Đánh dấu 5/5 cụm nạn nhân", check: (dr) => { const f=dr.filter(d=>d.status==="ACTIVE"&&d.memory); return f.length>0&&f.reduce((s,d)=>s+d.memory.sectorsVisited.size,0)>=f.length*3; } },
+          { id: "th_class", desc: "Phân loại: P1(105) P2(55) P3(40)", check: () => false },
+        ],
+        transition: (pt) => pt > 25 },
+      { name: "GĐ4: Thả hàng cứu trợ — P1 trước", briefing: "4 HERA-C cargo + 2 VEGA-X hộ tống — ưu tiên CRITICAL",
+        spawns: [
+          { id: "HERA-CARGO-01", type: "HERA-C", ...TH_C(109.10, 12.78), alt: 60, hdg: 120 },
+          { id: "HERA-CARGO-02", type: "HERA-C", ...TH_C(109.11, 12.78), alt: 60, hdg: 118 },
+          { id: "HERA-CARGO-03", type: "HERA-C", ...TH_C(109.10, 12.77), alt: 60, hdg: 125 },
+          { id: "HERA-CARGO-04", type: "HERA-C", ...TH_C(109.11, 12.77), alt: 60, hdg: 122 },
+          { id: "VEGA-ESCORT-01", type: "VEGA-X", ...TH_C(109.10, 12.79), alt: 100, hdg: 120 },
+          { id: "VEGA-ESCORT-02", type: "VEGA-X", ...TH_C(109.11, 12.79), alt: 100, hdg: 118 },
+        ],
+        cargoWP: TH_VICTIMS.filter(v => v.priority <= 2).map(v => ({ ...TH_C(v.pos[0], v.pos[1]), alt: 30 })),
+        weather: { windSpeed: 15, windDir: 90 },
+        threats: [
+          { ...TH_C(109.20, 12.758), radius: 400, type: "Gió giật cấp 8" },
+          { ...TH_C(109.27, 12.740), radius: 300, type: "Đường dây điện đứt" },
+        ],
+        objectives: [
+          { id: "th_p1a", desc: "Thả cứu thương → Phước Thành (P1, 45 người)", check: (dr) => dr.filter(d=>d.typeKey==="HERA-C"&&d.status==="ACTIVE").some(d=>Math.hypot(d.fd.x-TH_C(109.24,12.755).x, d.fd.y-TH_C(109.24,12.755).y)<80) },
+          { id: "th_p1b", desc: "Thả nước+kit sản khoa → Trung Hoà (P1, 60 người)", check: (dr) => dr.filter(d=>d.typeKey==="HERA-C"&&d.status==="ACTIVE").some(d=>Math.hypot(d.fd.x-TH_C(109.26,12.748).x, d.fd.y-TH_C(109.26,12.748).y)<80) },
+          { id: "th_p2a", desc: "Thả nhu yếu phẩm → Cầu Dinh Ông (P2, 30 người)", check: (dr) => dr.filter(d=>d.typeKey==="HERA-C"&&d.status==="ACTIVE").some(d=>Math.hypot(d.fd.x-TH_C(109.22,12.760).x, d.fd.y-TH_C(109.22,12.760).y)<80) },
+          { id: "th_p2b", desc: "Thả thuốc+lương khô → Kè sông Nam (P2, 25 người)", check: (dr) => dr.filter(d=>d.typeKey==="HERA-C"&&d.status==="ACTIVE").some(d=>Math.hypot(d.fd.x-TH_C(109.28,12.742).x, d.fd.y-TH_C(109.28,12.742).y)<80) },
+        ],
+        transition: (_, __, ___, os) => os["th_p1a"] && os["th_p1b"] && os["th_p2a"] && os["th_p2b"] },
+      { name: "GĐ5: Điều phối mặt đất", briefing: "Relay dữ liệu realtime — dẫn đường lực lượng cứu hộ mặt đất",
+        spawns: [
+          { id: "HERA-GUIDE-01", type: "HERA-S", ...TH_C(109.15, 12.76), alt: 50, hdg: 90 },
+          { id: "HERA-GUIDE-02", type: "HERA-S", ...TH_C(109.16, 12.75), alt: 50, hdg: 85 },
+        ],
+        waypoints: [
+          { ...TH_C(109.17, 12.755), alt: 50 }, { ...TH_C(109.20, 12.752), alt: 50 }, { ...TH_C(109.24, 12.755), alt: 50 },
+          { ...TH_C(109.18, 12.748), alt: 50 }, { ...TH_C(109.22, 12.745), alt: 50 }, { ...TH_C(109.26, 12.748), alt: 50 },
+        ],
+        clearThreats: true,
+        objectives: [
+          { id: "th_relay", desc: "Relay node RECON-01 tại 300m", check: () => false },
+          { id: "th_gd1", desc: "Dẫn đường tuyến 1 → Phước Thành", check: () => false },
+          { id: "th_gd2", desc: "Dẫn đường tuyến 2 → Trung Hoà", check: () => false },
+        ],
+        transition: (pt) => pt > 25 },
+      { name: "GĐ6: Thu hồi fleet — RTB", briefing: "Nhiệm vụ hoàn tất — 200 người cứu trợ — thu hồi toàn bộ drone",
+        waypoints: [{ ...TH_C(109.12, 12.72), alt: 100 }],
+        weather: { windSpeed: 8, windDir: 90 },
+        objectives: [{ id: "th_rtb", desc: "Toàn bộ fleet RTB — 0 tổn thất", check: (dr) => { const f=dr.filter(d=>d.spec.iff==="FRIENDLY"&&d.status==="ACTIVE"); const lp=TH_C(109.12,12.72); return f.filter(d=>Math.hypot(d.fd.x-lp.x,d.fd.y-lp.y)<200).length>=f.length*0.8; } }],
+        transition: (_, __, ___, os) => os["th_rtb"] },
+    ],
+  },
   // ── RESCUE PRESET MISSIONS (Demo Bộ Quốc Phòng) ──
   { id: "flood_qb", name: "Lũ lụt Quảng Bình", domain: "RESCUE", icon: HeartPulse, multi: true,
     center: [106.60, 17.47], zoom: 12,
@@ -1249,6 +1367,9 @@ export default function DroneVerse() {
         const wx = Math.sin(p0.weather.windDir * DEG) * p0.weather.windSpeed;
         const wy = Math.cos(p0.weather.windDir * DEG) * p0.weather.windSpeed;
         for (const dd of s.drones) { dd.fd.windX = wx; dd.fd.windY = wy; } }
+      // Emit phase 1 logs gradually
+      const p1Logs = m.phaseLogs?.[1];
+      if (p1Logs) p1Logs.forEach((msg, i) => setTimeout(() => setLogs(p => [{ m: msg, l: "info", t: Date.now() }, ...p].slice(0, 40)), (i + 1) * 2500));
     } else {
       phaseRef.current = null;
       setPhaseInfo(null);
@@ -1259,7 +1380,7 @@ export default function DroneVerse() {
 
   // Auto-demo: 1-click launch Lũ lụt QB + cinematic + weather
   const startDemo = useCallback(() => {
-    const m = MISSIONS[0]; // Lũ lụt Quảng Bình
+    const m = MISSIONS[0]; // Cứu hộ Tây Hoà — Kịch bản BQP
     launch(m);
     setTimeout(() => {
       setVw(m.center ? "map" : "split");
@@ -1543,6 +1664,9 @@ Format as plain text, no markdown.`;
               }
               setPhaseInfo({ name: ph.name, briefing: ph.briefing, idx: pe.currentPhase, total: pe.phases.length, objectives: ph.objectives || [], status: pe.objectiveStatus });
               setLogs(p => [{ m: `🚁 ${VI.phase} ${pe.currentPhase + 1}: ${ph.name} — ${ph.briefing}`, l: "success", t: Date.now() }, ...p].slice(0, 40));
+              // Emit phase-specific logs gradually
+              const pLogs = mis?.phaseLogs?.[pe.currentPhase + 1];
+              if (pLogs) pLogs.forEach((msg, i) => setTimeout(() => setLogs(p => [{ m: msg, l: "info", t: Date.now() }, ...p].slice(0, 40)), (i + 1) * 2500));
             }
           }
           // Update phase info objectives display
@@ -1737,10 +1861,15 @@ Format as plain text, no markdown.`;
                 <span style={{ color: done ? T.success : T.textFaint }}>{obj.desc}</span>
               </div>;
             })}
+            {mis?.victims && <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 4, paddingTop: 4, fontSize: 9 }}>
+              <div style={{ color: "#ff2040", marginBottom: 2 }}>🔴 P1: {mis.victims.filter(v=>v.priority===1).reduce((s,v)=>s+v.people,0)} người ({mis.victims.filter(v=>v.priority===1).length} cụm)</div>
+              <div style={{ color: "#ff8c00", marginBottom: 2 }}>🟠 P2: {mis.victims.filter(v=>v.priority===2).reduce((s,v)=>s+v.people,0)} người ({mis.victims.filter(v=>v.priority===2).length} cụm)</div>
+              <div style={{ color: "#00cc66" }}>🟢 P3: {mis.victims.filter(v=>v.priority===3).reduce((s,v)=>s+v.people,0)} người ({mis.victims.filter(v=>v.priority===3).length} cụm)</div>
+            </div>}
           </div>}
           <div style={{ flex: 1, display: "flex", gap: 1, padding: 1, background: T.bgCard }}>
             {vw === "map" && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-              <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} T={T} />
+              <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} T={T} victims={mis?.victims} />
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.accent, zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ TÁC CHIẾN</div>
             </div>}
             {(vw === "split" || vw === "3d") && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>

@@ -62,7 +62,7 @@ function waypointsToGeoJSON(waypoints, center) {
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: [lng, lat] },
-        properties: { idx: i, alt: w.alt || 150 },
+        properties: { idx: i, alt: w.alt || 150, label: w.label || "" },
       };
     }),
   };
@@ -84,7 +84,7 @@ function trailsToGeoJSON(drones, center) {
   return { type: "FeatureCollection", features };
 }
 
-export default function MapView({ drones, threats, waypoints, selectedId, onSelect, mission, T }) {
+export default function MapView({ drones, threats, waypoints, selectedId, onSelect, mission, T, victims }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const sourcesReady = useRef(false);
@@ -143,6 +143,15 @@ export default function MapView({ drones, threats, waypoints, selectedId, onSele
       map.addLayer({ id: "drone-markers", type: "circle", source: "drones", paint: { "circle-radius": 7, "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": ["case", ["==", ["get", "iff"], "HOSTILE"], "#ff3b5c", "#ffffff"], "circle-opacity": 0.95 } });
       map.addLayer({ id: "drone-labels", type: "symbol", source: "drones", layout: { "text-field": ["concat", ["get", "id"], " ", ["get", "alt"], "m"], "text-size": 10, "text-offset": [0, 1.8], "text-font": ["Open Sans Regular"] }, paint: { "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 } });
 
+      // Victim markers (triage)
+      map.addSource("victims", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({ id: "victim-glow", type: "circle", source: "victims", paint: { "circle-radius": ["case", ["==", ["get", "priority"], 1], 18, ["==", ["get", "priority"], 2], 14, 10], "circle-color": ["get", "color"], "circle-opacity": 0.2, "circle-blur": 0.8 } });
+      map.addLayer({ id: "victim-markers", type: "circle", source: "victims", paint: { "circle-radius": ["case", ["==", ["get", "priority"], 1], 10, ["==", ["get", "priority"], 2], 7, 5], "circle-color": ["get", "color"], "circle-stroke-width": ["case", ["==", ["get", "priority"], 1], 3, 1.5], "circle-stroke-color": "#ffffff", "circle-opacity": 0.95 } });
+      map.addLayer({ id: "victim-labels", type: "symbol", source: "victims", layout: { "text-field": ["concat", ["get", "name"], "\n", ["get", "people"], " người — ", ["get", "priorityLabel"]], "text-size": 11, "text-offset": [0, 2.5], "text-anchor": "top", "text-font": ["Open Sans Regular"] }, paint: { "text-color": ["get", "color"], "text-halo-color": "#000000", "text-halo-width": 1.5 } });
+
+      // Waypoint labels
+      map.addLayer({ id: "wp-labels", type: "symbol", source: "waypoints", layout: { "text-field": ["get", "label"], "text-size": 10, "text-offset": [0, 1.8], "text-anchor": "top", "text-font": ["Open Sans Regular"] }, paint: { "text-color": "#00e5ff", "text-halo-color": "#000000", "text-halo-width": 1 } });
+
       sourcesReady.current = true;
     });
 
@@ -179,6 +188,18 @@ export default function MapView({ drones, threats, waypoints, selectedId, onSele
         map.getSource("trails")?.setData(trailsToGeoJSON(dr, c));
         map.getSource("threats")?.setData(threatsToGeoJSON(th, c));
         map.getSource("waypoints")?.setData(waypointsToGeoJSON(wp, c));
+        // Victim markers (static — from mission data)
+        const vic = mission?.victims;
+        if (vic && map.getSource("victims")) {
+          map.getSource("victims").setData({
+            type: "FeatureCollection",
+            features: vic.map(v => ({
+              type: "Feature",
+              geometry: { type: "Point", coordinates: v.pos },
+              properties: { name: v.name, people: v.people, priority: v.priority, priorityLabel: v.priorityLabel, color: v.color, detail: v.detail },
+            })),
+          });
+        }
       } catch {}
     }, 100);
     return () => clearInterval(iv);
