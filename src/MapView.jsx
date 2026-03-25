@@ -2,208 +2,188 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-const STYLES = {
-  liberty: "https://tiles.openfreemap.org/styles/liberty",
-  bright: "https://tiles.openfreemap.org/styles/bright",
-  positron: "https://tiles.openfreemap.org/styles/positron",
+// Esri World Imagery — free, no API key
+const SATELLITE_STYLE = {
+  version: 8,
+  sources: {
+    esri: { type: "raster", tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256, maxzoom: 18, attribution: "Esri, Maxar" },
+    terrain: { type: "raster-dem", url: "https://demotiles.maplibre.org/terrain-tiles/tiles.json", tileSize: 256 },
+  },
+  layers: [{ id: "satellite", type: "raster", source: "esri" }],
+  terrain: { source: "terrain", exaggeration: 1.5 },
 };
 
-// Convert meter offset from origin → GPS coords
-function metersToGPS(x, y, centerLng, centerLat) {
-  const mPerDegLat = 111320;
-  const mPerDegLng = 111320 * Math.cos(centerLat * Math.PI / 180);
-  return [centerLng + x / mPerDegLng, centerLat + y / mPerDegLat];
-}
-
-function dronesToGeoJSON(drones, center) {
-  return {
-    type: "FeatureCollection",
-    features: drones.map(d => {
-      const [lng, lat] = metersToGPS(d.fd.x, d.fd.y, center[0], center[1]);
-      return {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [lng, lat] },
-        properties: { id: d.id, color: d.spec.color, iff: d.spec.iff, hdg: d.fd.hdg, alt: Math.round(d.fd.alt), speed: d.fd.speed.toFixed(1), battery: Math.round(d.fd.battery) },
-      };
-    }),
-  };
+function metersToGPS(x, y, cLng, cLat) {
+  const mLat = 111320, mLng = 111320 * Math.cos(cLat * Math.PI / 180);
+  return [cLng + x / mLng, cLat + y / mLat];
 }
 
 function threatsToGeoJSON(threats, center) {
   const features = [];
   for (const t of threats) {
     const [cx, cy] = metersToGPS(t.x, t.y, center[0], center[1]);
-    // Approximate circle with 32 points
     const pts = [];
     for (let i = 0; i <= 32; i++) {
       const a = (i / 32) * Math.PI * 2;
-      const [px, py] = metersToGPS(t.x + Math.cos(a) * t.radius, t.y + Math.sin(a) * t.radius, center[0], center[1]);
-      pts.push([px, py]);
+      const dlng = (t.radius * Math.cos(a)) / (111320 * Math.cos(cy * Math.PI / 180));
+      const dlat = (t.radius * Math.sin(a)) / 111320;
+      pts.push([cx + dlng, cy + dlat]);
     }
-    features.push({
-      type: "Feature",
-      geometry: { type: "Polygon", coordinates: [pts] },
-      properties: { type: t.type, radius: t.radius },
-    });
-    features.push({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [cx, cy] },
-      properties: { label: t.type },
-    });
+    features.push({ type: "Feature", geometry: { type: "Polygon", coordinates: [pts] }, properties: { type: t.type } });
+    features.push({ type: "Feature", geometry: { type: "Point", coordinates: [cx, cy] }, properties: { label: t.type } });
   }
   return { type: "FeatureCollection", features };
-}
-
-function waypointsToGeoJSON(waypoints, center) {
-  return {
-    type: "FeatureCollection",
-    features: waypoints.map((w, i) => {
-      const [lng, lat] = metersToGPS(w.x, w.y, center[0], center[1]);
-      return {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [lng, lat] },
-        properties: { idx: i, alt: w.alt || 150, label: w.label || "" },
-      };
-    }),
-  };
 }
 
 function trailsToGeoJSON(drones, center) {
   const features = [];
   for (const d of drones) {
     if (d.trail.length < 2) continue;
-    features.push({
-      type: "Feature",
-      geometry: {
-        type: "LineString",
-        coordinates: d.trail.map(p => metersToGPS(p.x, p.y, center[0], center[1])),
-      },
-      properties: { color: d.spec.color },
-    });
+    features.push({ type: "Feature", geometry: { type: "LineString", coordinates: d.trail.map(p => metersToGPS(p.x, p.y, center[0], center[1])) }, properties: { color: d.spec.color } });
   }
   return { type: "FeatureCollection", features };
 }
 
-export default function MapView({ drones, threats, waypoints, selectedId, onSelect, mission, T, victims }) {
+function flightPathGeoJSON(waypoints, center) {
+  if (waypoints.length < 2) return { type: "FeatureCollection", features: [] };
+  return { type: "FeatureCollection", features: [{ type: "Feature", geometry: { type: "LineString", coordinates: waypoints.map(w => metersToGPS(w.x, w.y, center[0], center[1])) }, properties: {} }] };
+}
+
+export default function MapView({ drones, threats, waypoints, selectedId, onSelect, mission, victims }) {
   const mapRef = useRef(null);
   const mapInst = useRef(null);
   const sourcesReady = useRef(false);
   const droneRef = useRef(drones);
   const threatRef = useRef(threats);
   const wpRef = useRef(waypoints);
-  const selRef = useRef(selectedId);
+  const droneMarkersRef = useRef(new Map());
+  const victimMarkersRef = useRef([]);
 
   useEffect(() => { droneRef.current = drones; }, [drones]);
   useEffect(() => { threatRef.current = threats; }, [threats]);
   useEffect(() => { wpRef.current = waypoints; }, [waypoints]);
-  useEffect(() => { selRef.current = selectedId; }, [selectedId]);
 
-  const center = mission?.center || [106.6, 17.47];
+  const center = mission?.center || [109.253, 12.752];
 
-  // Init map once
   useEffect(() => {
     const map = new maplibregl.Map({
       container: mapRef.current,
-      style: STYLES.liberty,
-      center: center,
-      zoom: 12,
-      pitch: 55,
+      style: SATELLITE_STYLE,
+      center,
+      zoom: mission?.zoom || 13,
+      pitch: 50,
       bearing: -15,
       attributionControl: false,
     });
-
     map.addControl(new maplibregl.NavigationControl(), "top-right");
 
     map.on("load", () => {
-      // Terrain
-      map.addSource("terrain", {
-        type: "raster-dem",
-        url: "https://demotiles.maplibre.org/terrain-tiles/tiles.json",
-        tileSize: 256,
-      });
-      map.setTerrain({ source: "terrain", exaggeration: 1.5 });
+      map.addSource("terrain-dem", { type: "raster-dem", url: "https://demotiles.maplibre.org/terrain-tiles/tiles.json", tileSize: 256 });
+      try { map.setTerrain({ source: "terrain-dem", exaggeration: 1.5 }); } catch {}
 
-      // Drone trails source + layer
+      // Trails
       map.addSource("trails", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "trail-lines", type: "line", source: "trails", paint: { "line-color": ["get", "color"], "line-width": 2, "line-opacity": 0.4 } });
+      map.addLayer({ id: "trail-lines", type: "line", source: "trails", paint: { "line-color": ["get", "color"], "line-width": 3, "line-opacity": 0.5 } });
 
-      // Threat zones
+      // Flight path
+      map.addSource("flightpath", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({ id: "fp-line", type: "line", source: "flightpath", paint: { "line-color": "#00e5ff", "line-width": 2, "line-dasharray": [4, 4], "line-opacity": 0.6 } });
+
+      // Threats
       map.addSource("threats", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "threat-fill", type: "fill", source: "threats", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#ff2020", "fill-opacity": 0.12 } });
-      map.addLayer({ id: "threat-border", type: "line", source: "threats", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#ff4040", "line-width": 2, "line-dasharray": [3, 2], "line-opacity": 0.6 } });
-      map.addLayer({ id: "threat-labels", type: "symbol", source: "threats", filter: ["has", "label"], layout: { "text-field": ["get", "label"], "text-size": 12, "text-offset": [0, -1.5] }, paint: { "text-color": "#ff4040", "text-halo-color": "#000", "text-halo-width": 1 } });
-
-      // Waypoints
-      map.addSource("waypoints", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "wp-markers", type: "circle", source: "waypoints", paint: { "circle-radius": 6, "circle-color": "#00aaff", "circle-stroke-width": 2, "circle-stroke-color": "#ffffff", "circle-opacity": 0.7 } });
-
-      // Drone markers
-      map.addSource("drones", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "drone-glow", type: "circle", source: "drones", paint: { "circle-radius": 14, "circle-color": ["get", "color"], "circle-opacity": 0.15, "circle-blur": 1 } });
-      map.addLayer({ id: "drone-markers", type: "circle", source: "drones", paint: { "circle-radius": 7, "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": ["case", ["==", ["get", "iff"], "HOSTILE"], "#ff3b5c", "#ffffff"], "circle-opacity": 0.95 } });
-      map.addLayer({ id: "drone-labels", type: "symbol", source: "drones", layout: { "text-field": ["concat", ["get", "id"], " ", ["get", "alt"], "m"], "text-size": 10, "text-offset": [0, 1.8], "text-font": ["Open Sans Regular"] }, paint: { "text-color": "#ffffff", "text-halo-color": "#000000", "text-halo-width": 1 } });
-
-      // Victim markers (triage)
-      map.addSource("victims", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "victim-glow", type: "circle", source: "victims", paint: { "circle-radius": ["case", ["==", ["get", "priority"], 1], 18, ["==", ["get", "priority"], 2], 14, 10], "circle-color": ["get", "color"], "circle-opacity": 0.2, "circle-blur": 0.8 } });
-      map.addLayer({ id: "victim-markers", type: "circle", source: "victims", paint: { "circle-radius": ["case", ["==", ["get", "priority"], 1], 10, ["==", ["get", "priority"], 2], 7, 5], "circle-color": ["get", "color"], "circle-stroke-width": ["case", ["==", ["get", "priority"], 1], 3, 1.5], "circle-stroke-color": "#ffffff", "circle-opacity": 0.95 } });
-      map.addLayer({ id: "victim-labels", type: "symbol", source: "victims", layout: { "text-field": ["concat", ["get", "name"], "\n", ["get", "people"], " người — ", ["get", "priorityLabel"]], "text-size": 11, "text-offset": [0, 2.5], "text-anchor": "top", "text-font": ["Open Sans Regular"] }, paint: { "text-color": ["get", "color"], "text-halo-color": "#000000", "text-halo-width": 1.5 } });
-
-      // Waypoint labels
-      map.addLayer({ id: "wp-labels", type: "symbol", source: "waypoints", layout: { "text-field": ["get", "label"], "text-size": 10, "text-offset": [0, 1.8], "text-anchor": "top", "text-font": ["Open Sans Regular"] }, paint: { "text-color": "#00e5ff", "text-halo-color": "#000000", "text-halo-width": 1 } });
+      map.addLayer({ id: "threat-fill", type: "fill", source: "threats", filter: ["==", "$type", "Polygon"], paint: { "fill-color": "#ff2040", "fill-opacity": 0.18 } });
+      map.addLayer({ id: "threat-border", type: "line", source: "threats", filter: ["==", "$type", "Polygon"], paint: { "line-color": "#ff2040", "line-width": 2.5, "line-dasharray": [4, 3], "line-opacity": 0.7 } });
+      map.addLayer({ id: "threat-labels", type: "symbol", source: "threats", filter: ["has", "label"], layout: { "text-field": ["get", "label"], "text-size": 13, "text-offset": [0, 0], "text-font": ["Open Sans Bold"] }, paint: { "text-color": "#ffffff", "text-halo-color": "#ff2040", "text-halo-width": 2 } });
 
       sourcesReady.current = true;
     });
 
-    // Click drone
-    map.on("click", "drone-markers", (e) => {
-      const id = e.features?.[0]?.properties?.id;
-      if (id && onSelect) onSelect(id);
-    });
-    map.on("mouseenter", "drone-markers", () => { map.getCanvas().style.cursor = "pointer"; });
-    map.on("mouseleave", "drone-markers", () => { map.getCanvas().style.cursor = ""; });
-
     mapInst.current = map;
-    return () => map.remove();
+    return () => { map.remove(); droneMarkersRef.current.forEach(m => m.remove()); droneMarkersRef.current.clear(); };
   }, []);
 
-  // Fly to mission center
+  // Fly to mission
   useEffect(() => {
     if (mapInst.current && mission?.center) {
-      mapInst.current.flyTo({ center: mission.center, zoom: mission.zoom || 12, pitch: 55, duration: 2000 });
+      mapInst.current.flyTo({ center: mission.center, zoom: mission.zoom || 13, pitch: 50, duration: 2000 });
     }
   }, [mission?.id]);
 
-  // Update GeoJSON data every render tick
+  // Victim HTML markers
+  useEffect(() => {
+    victimMarkersRef.current.forEach(m => m.remove());
+    victimMarkersRef.current = [];
+    if (!mapInst.current || !victims) return;
+    for (const v of victims) {
+      const el = document.createElement("div");
+      el.className = `victim-marker victim-p${v.priority}`;
+      el.innerHTML = `<span>${v.priority === 1 ? "🔴" : v.priority === 2 ? "🟠" : "🟢"} ${v.people} người</span><br/><small>${v.name}</small>`;
+      const marker = new maplibregl.Marker({ element: el, anchor: "bottom" }).setLngLat(v.pos).addTo(mapInst.current);
+      victimMarkersRef.current.push(marker);
+    }
+  }, [victims, mission?.id]);
+
+  // Update loop
   useEffect(() => {
     const map = mapInst.current;
-    if (!map || !sourcesReady.current) return;
+    if (!map) return;
     const iv = setInterval(() => {
       const dr = droneRef.current;
       const th = threatRef.current;
       const wp = wpRef.current;
       const c = center;
-      try {
-        map.getSource("drones")?.setData(dronesToGeoJSON(dr, c));
-        map.getSource("trails")?.setData(trailsToGeoJSON(dr, c));
-        map.getSource("threats")?.setData(threatsToGeoJSON(th, c));
-        map.getSource("waypoints")?.setData(waypointsToGeoJSON(wp, c));
-        // Victim markers (static — from mission data)
-        const vic = mission?.victims;
-        if (vic && map.getSource("victims")) {
-          map.getSource("victims").setData({
-            type: "FeatureCollection",
-            features: vic.map(v => ({
-              type: "Feature",
-              geometry: { type: "Point", coordinates: v.pos },
-              properties: { name: v.name, people: v.people, priority: v.priority, priorityLabel: v.priorityLabel, color: v.color, detail: v.detail },
-            })),
-          });
+
+      // Update/create HTML drone markers
+      const activeIds = new Set();
+      for (const d of dr) {
+        if (d.status === "ELIMINATED") continue;
+        activeIds.add(d.id);
+        const [lng, lat] = metersToGPS(d.fd.x, d.fd.y, c[0], c[1]);
+        let marker = droneMarkersRef.current.get(d.id);
+        if (!marker) {
+          const el = document.createElement("div");
+          el.className = "drone-marker";
+          el.innerHTML = `<div class="drone-body" style="background:${d.spec.color};border-color:${d.spec.iff === "HOSTILE" ? "#ff3b5c" : "#fff"}"><div class="drone-arrow"></div></div><div class="drone-pulse" style="border-color:${d.spec.color}"></div><div class="drone-label">${d.id}<br/>${Math.round(d.fd.alt)}m</div>`;
+          el.onclick = () => onSelect?.(d.id);
+          marker = new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map);
+          droneMarkersRef.current.set(d.id, marker);
         }
-      } catch {}
+        marker.setLngLat([lng, lat]);
+        const arrow = marker.getElement().querySelector(".drone-arrow");
+        if (arrow) arrow.style.transform = `rotate(${d.fd.hdg}deg)`;
+        const lbl = marker.getElement().querySelector(".drone-label");
+        if (lbl) lbl.innerHTML = `${d.id}<br/>${Math.round(d.fd.alt)}m`;
+      }
+      // Remove old markers
+      for (const [id, m] of droneMarkersRef.current) { if (!activeIds.has(id)) { m.remove(); droneMarkersRef.current.delete(id); } }
+
+      // GeoJSON layers
+      if (sourcesReady.current) {
+        try {
+          map.getSource("trails")?.setData(trailsToGeoJSON(dr, c));
+          map.getSource("threats")?.setData(threatsToGeoJSON(th, c));
+          map.getSource("flightpath")?.setData(flightPathGeoJSON(wp, c));
+        } catch {}
+      }
     }, 100);
     return () => clearInterval(iv);
   }, [center]);
 
-  return <div ref={mapRef} style={{ width: "100%", height: "100%", borderRadius: 8, overflow: "hidden" }} />;
+  return <>
+    <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+    <style>{`
+      .drone-marker { position:relative; width:44px; height:44px; cursor:pointer; }
+      .drone-body { width:18px; height:18px; border-radius:50%; position:absolute; top:13px; left:13px; border:2.5px solid #fff; z-index:2; box-shadow:0 0 12px rgba(0,229,255,0.6); }
+      .drone-arrow { width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:14px solid #fff; position:absolute; top:-12px; left:4px; transform-origin:center 17px; filter:drop-shadow(0 0 2px rgba(0,0,0,0.8)); }
+      .drone-pulse { position:absolute; top:2px; left:2px; width:40px; height:40px; border-radius:50%; border:2px solid; opacity:0; animation:dronePulse 2s infinite; }
+      .drone-label { position:absolute; top:46px; left:50%; transform:translateX(-50%); font:bold 11px 'JetBrains Mono',monospace; color:#fff; text-shadow:0 0 6px #000,0 0 12px #000; white-space:nowrap; text-align:center; z-index:3; line-height:1.3; }
+      @keyframes dronePulse { 0%{transform:scale(0.5);opacity:0.8} 100%{transform:scale(2.2);opacity:0} }
+      .victim-marker { padding:5px 10px; border-radius:8px; font:bold 12px 'JetBrains Mono',monospace; color:#fff; text-shadow:0 0 4px #000; border:2px solid rgba(255,255,255,0.8); cursor:pointer; white-space:nowrap; text-align:center; line-height:1.4; backdrop-filter:blur(4px); }
+      .victim-marker small { font-size:10px; font-weight:400; opacity:0.9; }
+      .victim-p1 { background:rgba(255,32,64,0.85); animation:victimPulse 1.2s infinite; }
+      .victim-p2 { background:rgba(255,140,0,0.8); }
+      .victim-p3 { background:rgba(0,170,85,0.75); }
+      @keyframes victimPulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,32,64,0.7)} 50%{box-shadow:0 0 0 14px rgba(255,32,64,0)} }
+    `}</style>
+  </>;
 }

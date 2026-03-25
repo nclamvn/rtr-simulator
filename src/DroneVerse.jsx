@@ -1868,10 +1868,58 @@ Format as plain text, no markdown.`;
             </div>}
           </div>}
           <div style={{ flex: 1, display: "flex", gap: 1, padding: 1, background: T.bgCard }}>
-            {vw === "map" && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-              <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} T={T} victims={mis?.victims} />
-              <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.accent, zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ TÁC CHIẾN</div>
-            </div>}
+            {vw === "map" && <>
+              {/* MAP 60% */}
+              <div style={{ flex: 3, position: "relative", minHeight: 0 }}>
+                <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} victims={mis?.victims} />
+                <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: "rgba(0,0,0,0.7)", padding: "4px 10px", borderRadius: 4, fontSize: 11, color: "#00e5ff", zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ VỆ TINH</div>
+              </div>
+              {/* LOG PANEL 40% */}
+              <div style={{ flex: 2, display: "flex", flexDirection: "column", background: T.bgPanel, borderLeft: `1px solid ${T.border}`, overflow: "hidden" }}>
+                {/* Mission clock + status */}
+                <div style={{ padding: "10px 14px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: elapsed > 300 ? T.danger : T.accent, fontVariantNumeric: "tabular-nums", fontFamily: "inherit" }}>T+{String(Math.floor(elapsed / 60)).padStart(2, "0")}:{String(Math.floor(elapsed % 60)).padStart(2, "0")}</div>
+                  <div style={{ fontSize: 11, color: T.textDim }}>{dr.length} drone | Pin: {dr.length ? Math.round(dr.reduce((s,d) => s + d.fd.battery, 0) / dr.length) : 0}%</div>
+                </div>
+                {/* Phase indicator */}
+                {phaseInfo && <div style={{ padding: "8px 14px", borderBottom: `1px solid ${T.border}`, borderLeft: `3px solid ${T.purple}` }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.purple, marginBottom: 4 }}>{VI.phase} {phaseInfo.idx + 1}/{phaseInfo.total}: {phaseInfo.name}</div>
+                  <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6 }}>{phaseInfo.briefing}</div>
+                  {phaseInfo.objectives.map(obj => {
+                    const done = phaseInfo.status?.[obj.id];
+                    return <div key={obj.id} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, marginBottom: 3 }}>
+                      {done ? <CheckCircle size={12} color={T.success} /> : <Circle size={12} color={T.borderAccent} />}
+                      <span style={{ color: done ? T.success : T.textFaint }}>{obj.desc}</span>
+                    </div>;
+                  })}
+                  {mis?.victims && <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 6, paddingTop: 6, fontSize: 11, display: "flex", gap: 12 }}>
+                    <span style={{ color: "#ff2040" }}>🔴 P1: {mis.victims.filter(v=>v.priority===1).reduce((s,v)=>s+v.people,0)}</span>
+                    <span style={{ color: "#ff8c00" }}>🟠 P2: {mis.victims.filter(v=>v.priority===2).reduce((s,v)=>s+v.people,0)}</span>
+                    <span style={{ color: "#00cc66" }}>🟢 P3: {mis.victims.filter(v=>v.priority===3).reduce((s,v)=>s+v.people,0)}</span>
+                  </div>}
+                </div>}
+                {/* Realtime Log */}
+                <div ref={el => { if (el) el.scrollTop = el.scrollHeight; }} style={{ flex: 1, overflow: "auto", padding: "8px 10px" }}>
+                  <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><Activity size={12} /> {VI.log}</div>
+                  {logs.map((l, i) => <div key={i} style={{
+                    fontSize: 12, padding: "6px 10px", marginBottom: 4, borderRadius: 6, lineHeight: 1.6,
+                    borderLeft: `3px solid ${l.l === "success" ? T.success : l.l === "warning" ? T.warn : l.l === "critical" ? T.danger : T.border}`,
+                    background: l.l === "success" ? `${T.success}10` : l.l === "warning" ? `${T.warn}10` : l.l === "critical" ? `${T.danger}10` : "transparent",
+                    color: T.text, animation: i === 0 ? "logSlide 0.3s ease" : "none",
+                  }}>
+                    <span style={{ color: T.textMuted, marginRight: 6, fontSize: 10 }}>{new Date(l.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                    {l.m}
+                  </div>)}
+                </div>
+                {/* Fleet mini */}
+                <div style={{ padding: "6px 14px", borderTop: `1px solid ${T.border}`, fontSize: 10, color: T.textDim, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <span>Gió: {windSpd}m/s</span>
+                  <span>{VI.friendly}: {fr}</span>
+                  {ho > 0 && <span style={{ color: T.danger }}>{VI.hostile}: {ho}</span>}
+                  {eliminated > 0 && <span style={{ color: T.hostile }}>Loại: {eliminated}</span>}
+                </div>
+              </div>
+            </>}
             {(vw === "split" || vw === "3d") && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
               <Viewport3D drones={dr} threats={th} waypoints={wp} selectedId={sel} camMode={camMode} windSpd={windSpd} threeTheme={T.three} T={T} />
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.textMuted }}><Box size={12} /> 3D TACTICAL</div>
@@ -1978,7 +2026,7 @@ Format as plain text, no markdown.`;
         <div style={{ fontSize: 9, fontWeight: 700, color: "#a855f7", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>🎖️ {VI.aiAdvisor}</div>
         {aiAdvice.map((a, i) => <div key={i} style={{ fontSize: 9, color: T.text, marginBottom: 3 }}>{i + 1}. {a}</div>)}
       </div>}
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.borderAccent};border-radius:3px}button:hover{filter:brightness(1.1)}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}input[type=range]{appearance:none;background:${T.border};border-radius:2px;outline:none}input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:${T.accent};cursor:pointer}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.borderAccent};border-radius:3px}button:hover{filter:brightness(1.1)}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes logSlide{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}input[type=range]{appearance:none;background:${T.border};border-radius:2px;outline:none}input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:${T.accent};cursor:pointer}`}</style>
     </div>
   );
 }
