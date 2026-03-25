@@ -176,10 +176,10 @@ export default function MapView({ drones, threats, waypoints, selectedId, onSele
       .drone-body { width:18px; height:18px; border-radius:50%; position:absolute; top:13px; left:13px; border:2.5px solid #fff; z-index:2; box-shadow:0 0 12px rgba(0,229,255,0.6); }
       .drone-arrow { width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-bottom:14px solid #fff; position:absolute; top:-12px; left:4px; transform-origin:center 17px; filter:drop-shadow(0 0 2px rgba(0,0,0,0.8)); }
       .drone-pulse { position:absolute; top:2px; left:2px; width:40px; height:40px; border-radius:50%; border:2px solid; opacity:0; animation:dronePulse 2s infinite; }
-      .drone-label { position:absolute; top:46px; left:50%; transform:translateX(-50%); font:bold 11px 'JetBrains Mono',monospace; color:#fff; text-shadow:0 0 6px #000,0 0 12px #000; white-space:nowrap; text-align:center; z-index:3; line-height:1.3; }
+      .drone-label { position:absolute; top:46px; left:50%; transform:translateX(-50%); font:bold 13px 'JetBrains Mono',monospace; color:#fff; text-shadow:0 0 6px #000,0 0 12px #000; white-space:nowrap; text-align:center; z-index:3; line-height:1.5; }
       @keyframes dronePulse { 0%{transform:scale(0.5);opacity:0.8} 100%{transform:scale(2.2);opacity:0} }
-      .victim-marker { padding:5px 10px; border-radius:8px; font:bold 12px 'JetBrains Mono',monospace; color:#fff; text-shadow:0 0 4px #000; border:2px solid rgba(255,255,255,0.8); cursor:pointer; white-space:nowrap; text-align:center; line-height:1.4; backdrop-filter:blur(4px); }
-      .victim-marker small { font-size:10px; font-weight:400; opacity:0.9; }
+      .victim-marker { padding:6px 12px; border-radius:8px; font:bold 14px 'JetBrains Mono',monospace; color:#fff; text-shadow:0 0 4px #000; border:2px solid rgba(255,255,255,0.8); cursor:pointer; white-space:nowrap; text-align:center; line-height:1.5; backdrop-filter:blur(4px); }
+      .victim-marker small { font-size:12px; font-weight:400; opacity:0.9; }
       .victim-p1 { background:rgba(255,32,64,0.85); animation:victimPulse 1.2s infinite; }
       .victim-p2 { background:rgba(255,140,0,0.8); }
       .victim-p3 { background:rgba(0,170,85,0.75); }
