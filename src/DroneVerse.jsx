@@ -44,7 +44,7 @@ const THEMES = {
   dark: {
     bg: "#000000", bgPanel: "#000000", bgCard: "#0a0a0a", bgOverlay: "#0c1525ee",
     border: "#222", borderAccent: "#333",
-    text: "#e0e8f0", textDim: "#90b0d0", textMuted: "#7090b0", textFaint: "#556070",
+    text: "#e0e8f0", textDim: "#90b0d0", textMuted: "#7090b0", textFaint: T.textFaint,
     accent: "#00e5ff", accentBg: "#00e5ff18", accentBorder: "#00e5ff60",
     danger: "#ff3b5c", dangerBg: "#ff3b5c30",
     success: "#00e878", successBg: "#00e87820",
@@ -543,7 +543,7 @@ function RadarPPI({ drones, threats, waypoints, radarRange, selectedId, onSelect
 // ═══════════════════════════════════════════
 // 3D VIEWPORT — cinematic upgrade
 // ═══════════════════════════════════════════
-function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, threeTheme }) {
+function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, threeTheme, T }) {
   const mountRef = useRef(null);
   const dRef = useRef(drones); const tRef = useRef(threats); const wRef = useRef(waypoints);
   const sRef = useRef(selectedId); const cmRef = useRef(camMode || "orbit"); const wsRef = useRef(windSpd || 0);
@@ -908,15 +908,15 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, 
   // SPEC-E: Audio indicator overlay
   const au = audioRef.current;
   return <div ref={mountRef} style={{ width: "100%", height: "100%", borderRadius: 8, overflow: "hidden", position: "relative" }}>
-    <div style={{ position: "absolute", bottom: 8, left: 8, background: "#000000aa", borderRadius: 6, padding: "5px 8px", fontSize: 7, fontFamily: "inherit", display: "flex", flexDirection: "column", gap: 3, zIndex: 2 }}>
+    <div style={{ position: "absolute", bottom: 8, left: 8, background: T.bgOverlay, borderRadius: 6, padding: "5px 8px", fontSize: 7, fontFamily: "inherit", display: "flex", flexDirection: "column", gap: 3, zIndex: 2 }}>
       {[["PROP", au.prop, "#00e5ff"], ["WIND", au.wind, "#00e878"], ["ALERT", au.alert, "#ff3b5c"]].map(([label, val, color]) => (
         <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <Volume2 size={7} color={color} />
-          <span style={{ color: "#7090b0", width: 28 }}>{label}</span>
-          <div style={{ width: 60, height: 3, background: "#222", borderRadius: 2, overflow: "hidden" }}>
+          <span style={{ color: T.textMuted, width: 28 }}>{label}</span>
+          <div style={{ width: 60, height: 3, background: T.border, borderRadius: 2, overflow: "hidden" }}>
             <div style={{ width: `${Math.round((val || 0) * 100)}%`, height: "100%", background: color, borderRadius: 2 }} />
           </div>
-          <span style={{ color: "#7090b0", width: 22, textAlign: "right" }}>{Math.round((val || 0) * 100)}%</span>
+          <span style={{ color: T.textMuted, width: 22, textAlign: "right" }}>{Math.round((val || 0) * 100)}%</span>
         </div>
       ))}
     </div>
@@ -1843,16 +1843,16 @@ Format as plain text, no markdown.`;
             <button onClick={() => setRun(!run)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: `1px solid ${run ? T.accentBorder : T.border}`, background: run ? T.accentBg : T.bgCard, color: run ? T.accent : T.textDim, cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "inherit" }}>{run ? <Pause size={14} /> : <Play size={14} />}{run ? VI.pause : VI.run}</button>
             {mis && <button onClick={() => setShowReport(true)} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #00e5ff40", background: "#00e5ff10", color: "#00e5ff", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center" }}><FileText size={12} /></button>}
             {mis && <button onClick={requestAiDebrief} disabled={aiDebrief === "loading"} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #a855f740", background: aiDebrief === "loading" ? "#a855f725" : "#a855f710", color: "#a855f7", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", fontSize: 8 }}>{aiDebrief === "loading" ? <span style={{ animation: "pulse 1s infinite" }}>...</span> : <Cpu size={12} />}</button>}
-            <button onClick={() => { swRef.current = new SwarmController(); setMis(null); setRun(false); setElapsed(0); setSel(null); setTel([]); setLogs([]); setShowReport(false); setSideTab("fleet"); setWindDir(0); setWindSpd(0); setCamMode("orbit"); phaseRef.current = null; setPhaseInfo(null); kgRef.current = null; edRef.current = null; setEmergenceFeed([]); setGraphStats(null); setShowGraphOverlay(false); setAiDebrief(null); setShowAiModal(false); }} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #222", background: "#0a0a0a", color: "#7090b0", cursor: "pointer", fontFamily: "inherit" }}><RotateCcw size={12} /></button>
+            <button onClick={() => { swRef.current = new SwarmController(); setMis(null); setRun(false); setElapsed(0); setSel(null); setTel([]); setLogs([]); setShowReport(false); setSideTab("fleet"); setWindDir(0); setWindSpd(0); setCamMode("orbit"); phaseRef.current = null; setPhaseInfo(null); kgRef.current = null; edRef.current = null; setEmergenceFeed([]); setGraphStats(null); setShowGraphOverlay(false); setAiDebrief(null); setShowAiModal(false); }} style={{ padding: "8px 10px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.bgCard, color: T.textMuted, cursor: "pointer", fontFamily: "inherit" }}><RotateCcw size={12} /></button>
           </div>
         </div>
         {/* CENTER */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
           {phaseInfo && <div style={{ position: "absolute", top: 44, left: 12, zIndex: 10, background: T.bgOverlay, border: `1px solid ${T.purple}40`, borderRadius: 8, padding: "10px 16px", maxWidth: 320, minWidth: 200, fontFamily: "inherit" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: T.purple, marginBottom: 4 }}>{VI.phase} {phaseInfo.idx + 1}/{phaseInfo.total}: {phaseInfo.name}</div>
-            <div style={{ fontSize: 8, color: "#7090b0", marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 8, color: T.textMuted, marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span>{phaseInfo.briefing}</span>
-              {mis && <button onClick={requestAdvice} disabled={adviceCooldown > 0 || aiAdvice === "loading"} style={{ padding: "2px 6px", borderRadius: 3, border: "1px solid #a855f740", background: "#a855f715", color: adviceCooldown > 0 ? "#556070" : "#a855f7", cursor: adviceCooldown > 0 ? "default" : "pointer", fontSize: 7, fontFamily: "inherit", fontWeight: 700, whiteSpace: "nowrap" }}><Brain size={8} /> {adviceCooldown > 0 ? `${adviceCooldown}s` : VI.aiAdvisor}</button>}
+              {mis && <button onClick={requestAdvice} disabled={adviceCooldown > 0 || aiAdvice === "loading"} style={{ padding: "2px 6px", borderRadius: 3, border: "1px solid #a855f740", background: "#a855f715", color: adviceCooldown > 0 ? T.textFaint : "#a855f7", cursor: adviceCooldown > 0 ? "default" : "pointer", fontSize: 7, fontFamily: "inherit", fontWeight: 700, whiteSpace: "nowrap" }}><Brain size={8} /> {adviceCooldown > 0 ? `${adviceCooldown}s` : VI.aiAdvisor}</button>}
             </div>
             {phaseInfo.objectives.map(obj => {
               const done = phaseInfo.status?.[obj.id];
@@ -1873,23 +1873,23 @@ Format as plain text, no markdown.`;
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.accent, zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ TÁC CHIẾN</div>
             </div>}
             {(vw === "split" || vw === "3d") && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-              <Viewport3D drones={dr} threats={th} waypoints={wp} selectedId={sel} camMode={camMode} windSpd={windSpd} threeTheme={T.three} />
+              <Viewport3D drones={dr} threats={th} waypoints={wp} selectedId={sel} camMode={camMode} windSpd={windSpd} threeTheme={T.three} T={T} />
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.textMuted }}><Box size={12} /> 3D TACTICAL</div>
               <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 3, zIndex: 2 }}>
                 {[["orbit", RotateCcw], ["chase", Eye], ["topdown", Maximize2], ["cinematic", Film]].map(([md, Icon]) => (
                   <button key={md} onClick={() => setCamMode(md)} style={{ padding: "4px 6px", borderRadius: 4, border: "none", cursor: "pointer", background: camMode === md ? "#00e5ff30" : "#000000aa", color: camMode === md ? "#00e5ff" : "#7090b0", fontSize: 7, fontFamily: "inherit", fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}><Icon size={10} />{md.toUpperCase()}</button>
                 ))}
               </div>
-              {emergenceFeed.length > 0 && <div style={{ position: "absolute", bottom: 50, left: 8, background: "#0c1525ee", border: "1px solid #a855f730", borderRadius: 6, padding: "5px 8px", maxWidth: 250, zIndex: 2 }}>
+              {emergenceFeed.length > 0 && <div style={{ position: "absolute", bottom: 50, left: 8, background: T.bgOverlay, border: "1px solid #a855f730", borderRadius: 6, padding: "5px 8px", maxWidth: 250, zIndex: 2 }}>
                 <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 3, display: "flex", alignItems: "center", gap: 3 }}><Brain size={8} /> {VI.emergence}</div>
-                {emergenceFeed.slice(0, 4).map((e, i) => <div key={i} style={{ fontSize: 8, color: "#c0a0e0", marginBottom: 1, opacity: Math.max(0.3, 1 - (Date.now() - e.timestamp) / 8000) }}>⚡ {e.type}: {e.desc}</div>)}
+                {emergenceFeed.slice(0, 4).map((e, i) => <div key={i} style={{ fontSize: 8, color: T.textDim, marginBottom: 1, opacity: Math.max(0.3, 1 - (Date.now() - e.timestamp) / 8000) }}>⚡ {e.type}: {e.desc}</div>)}
               </div>}
             </div>}
             {(vw === "split" || vw === "radar") && <div style={{ flex: vw === "radar" ? 1 : 0, flexBasis: vw === "split" ? 400 : "auto", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: T.radar.bg, position: "relative", padding: 8 }}>
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.success }}><Radar size={12} /> PPI RADAR</div>
               <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 3 }}>
                 <button onClick={() => setShowGraphOverlay(!showGraphOverlay)} style={{ padding: "2px 6px", borderRadius: 3, border: "none", cursor: "pointer", background: showGraphOverlay ? "#a855f730" : "#111", color: showGraphOverlay ? "#a855f7" : "#40a070", fontSize: 8, fontFamily: "inherit", fontWeight: 600 }}><GitBranch size={9} /></button>
-                {[200, 400, 600, 800].map(r => <button key={r} onClick={() => setRng(r)} style={{ padding: "2px 6px", borderRadius: 3, border: "none", cursor: "pointer", background: rng === r ? "#00aa60" : "#111", color: rng === r ? "#00ff80" : "#40a070", fontSize: 8, fontFamily: "inherit", fontWeight: 600 }}>{r}</button>)}
+                {[200, 400, 600, 800].map(r => <button key={r} onClick={() => setRng(r)} style={{ padding: "2px 6px", borderRadius: 3, border: "none", cursor: "pointer", background: rng === r ? "#00aa60" : T.bgCard, color: rng === r ? "#00ff80" : "#40a070", fontSize: 8, fontFamily: "inherit", fontWeight: 600 }}>{r}</button>)}
               </div>
               <RadarPPI drones={dr} threats={th} waypoints={wp} radarRange={rng} selectedId={sel} onSelect={setSel} onAddWaypoint={addWaypoint} wind={{ dir: windDir, speed: windSpd }} graphOverlay={showGraphOverlay} kg={kgRef.current} radarTheme={T.radar} />
             </div>}
@@ -1902,7 +1902,7 @@ Format as plain text, no markdown.`;
                 {[[Navigation,"HDG",`${Math.round(sd.fd.hdg)}°`,"#c0d0e0"],[Gauge,"SPD",`${sd.fd.speed.toFixed(1)}`,"#00e5ff"],[ArrowUpRight,"ALT",`${Math.round(sd.fd.alt)}m`,"#00e878"],[Activity,"VS",`${sd.fd.vs > 0 ? "+" : ""}${sd.fd.vs.toFixed(1)}`,(sd.fd.vs > 0 ? "#00e878" : "#ff3b5c")],[Battery,"BAT",`${Math.round(sd.fd.battery)}%`,(sd.fd.battery < 25 ? "#ff3b5c" : "#00e878")],[Signal,"SIG",`${Math.round(sd.fd.signal)}%`,(sd.fd.signal < 60 ? "#ffb020" : "#00e5ff")],[Compass,"BNK",`${Math.round(sd.fd.bank)}°`,"#a855f7"],[Shield,"IFF",sd.spec.iff,(sd.spec.iff === "HOSTILE" ? "#ff3b5c" : "#00e878")]].map(([I,k,v,c]) => <div key={k} style={{ display: "flex", alignItems: "center", gap: 4 }}><I size={9} color={T.textMuted} /><span style={{ fontSize: 10, color: T.textMuted, width: 30 }}>{k}</span><span style={{ fontSize: 12, fontWeight: 600, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</span></div>)}
               {sd.memory && <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #222", paddingTop: 3, marginTop: 2 }}>
                 <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 2, display: "flex", alignItems: "center", gap: 3 }}><Brain size={7} /> {VI.agentMem}</div>
-                <div style={{ fontSize: 8, color: "#7090b0", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+                <div style={{ fontSize: 8, color: T.textMuted, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                   <span>XP:<b style={{color:"#a855f7"}}>{Math.round(sd.memory.experienceScore)}</b></span>
                   <span>Sec:<b style={{color:"#00e5ff"}}>{sd.memory.sectorsVisited.size}/16</b></span>
                   <span>Dist:<b style={{color:"#00e878"}}>{(sd.memory.distanceTraveled/1000).toFixed(1)}km</b></span>
@@ -1930,53 +1930,53 @@ Format as plain text, no markdown.`;
         </div>
       </div>
       {showReport && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setShowReport(false)}>
-        <div style={{ background: "#0c1525ee", border: "1px solid #00e5ff40", borderRadius: 12, maxWidth: 500, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: T.bgOverlay, border: "1px solid #00e5ff40", borderRadius: 12, maxWidth: 500, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#00e5ff" }}><FileText size={14} /> MISSION DEBRIEF</div>
-            <button onClick={() => setShowReport(false)} style={{ background: "none", border: "none", color: "#7090b0", cursor: "pointer", padding: 4 }}><X size={16} /></button>
+            <button onClick={() => setShowReport(false)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", padding: 4 }}><X size={16} /></button>
           </div>
-          <pre style={{ fontSize: 10, color: "#c0d0e0", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "#000", borderRadius: 8, padding: 14, border: "1px solid #222", marginBottom: 14, maxHeight: 400, overflow: "auto" }}>{generateReport()}</pre>
+          <pre style={{ fontSize: 10, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", background: T.bgCard, borderRadius: 8, padding: 14, border: `1px solid ${T.border}`, marginBottom: 14, maxHeight: 400, overflow: "auto" }}>{generateReport()}</pre>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => { navigator.clipboard.writeText(generateReport()); log("Report copied to clipboard", "success"); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: "1px solid #00e5ff40", background: "#00e5ff15", color: "#00e5ff", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><Copy size={12} /> COPY</button>
-            <button onClick={() => setShowReport(false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: "1px solid #333", background: "#0a0a0a", color: "#7090b0", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><X size={12} /> CLOSE</button>
+            <button onClick={() => setShowReport(false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: `1px solid ${T.borderAccent}`, background: T.bgCard, color: T.textMuted, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><X size={12} /> CLOSE</button>
           </div>
         </div>
       </div>}
       {showAiModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => setShowAiModal(false)}>
-        <div style={{ background: "#0c1525ee", border: "1px solid #a855f740", borderRadius: 12, maxWidth: 540, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: T.bgOverlay, border: "1px solid #a855f740", borderRadius: 12, maxWidth: 540, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#a855f7" }}><Cpu size={14} /> AI TACTICAL DEBRIEF</div>
-            <button onClick={() => setShowAiModal(false)} style={{ background: "none", border: "none", color: "#7090b0", cursor: "pointer", padding: 4 }}><X size={16} /></button>
+            <button onClick={() => setShowAiModal(false)} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", padding: 4 }}><X size={16} /></button>
           </div>
           {aiDebrief === "loading" ? <div style={{ fontSize: 11, color: "#a855f7", padding: 20, textAlign: "center" }}>Analyzing simulation data...</div>
-          : <pre style={{ fontSize: 10, color: "#c0d0e0", lineHeight: 1.6, whiteSpace: "pre-wrap", background: "#000", borderRadius: 8, padding: 14, border: "1px solid #222", marginBottom: 14, maxHeight: 400, overflow: "auto" }}>{aiDebrief}</pre>}
+          : <pre style={{ fontSize: 10, color: T.text, lineHeight: 1.6, whiteSpace: "pre-wrap", background: T.bgCard, borderRadius: 8, padding: 14, border: `1px solid ${T.border}`, marginBottom: 14, maxHeight: 400, overflow: "auto" }}>{aiDebrief}</pre>}
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => { if (aiDebrief && aiDebrief !== "loading") navigator.clipboard.writeText(aiDebrief); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: "1px solid #a855f740", background: "#a855f715", color: "#a855f7", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><Copy size={12} /> COPY</button>
-            <button onClick={() => setShowAiModal(false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: "1px solid #333", background: "#0a0a0a", color: "#7090b0", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><X size={12} /> CLOSE</button>
+            <button onClick={() => setShowAiModal(false)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: `1px solid ${T.borderAccent}`, background: T.bgCard, color: T.textMuted, cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}><X size={12} /> CLOSE</button>
           </div>
-          <div style={{ fontSize: 7, color: "#556070", marginTop: 8, textAlign: "center" }}>Generated by Claude — {new Date().toLocaleString()}</div>
+          <div style={{ fontSize: 7, color: T.textFaint, marginTop: 8, textAlign: "center" }}>Generated by Claude — {new Date().toLocaleString()}</div>
         </div>
       </div>}
       {/* AI Scenario Generator Modal */}
       {showScenarioModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => { setShowScenarioModal(false); setScenarioLoading(false); }}>
-        <div style={{ background: "#0c1525ee", border: "1px solid #a855f740", borderRadius: 12, maxWidth: 500, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
+        <div style={{ background: T.bgOverlay, border: "1px solid #a855f740", borderRadius: 12, maxWidth: 500, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#a855f7" }}><Brain size={14} /> {VI.aiScenario}</div>
-            <button onClick={() => { setShowScenarioModal(false); setScenarioLoading(false); }} style={{ background: "none", border: "none", color: "#7090b0", cursor: "pointer", padding: 4 }}><X size={16} /></button>
+            <button onClick={() => { setShowScenarioModal(false); setScenarioLoading(false); }} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", padding: 4 }}><X size={16} /></button>
           </div>
           {scenarioLoading ? <div style={{ textAlign: "center", padding: 30, color: "#a855f7", fontSize: 11 }}>Đang phân tích tình huống...</div> : <>
-            <select value={scenarioType} onChange={e => setScenarioType(e.target.value)} style={{ width: "100%", padding: "8px 10px", marginBottom: 8, borderRadius: 6, border: "1px solid #333", background: "#0a0a0a", color: "#c0d0e0", fontSize: 10, fontFamily: "inherit" }}>
+            <select value={scenarioType} onChange={e => setScenarioType(e.target.value)} style={{ width: "100%", padding: "8px 10px", marginBottom: 8, borderRadius: 6, border: `1px solid ${T.borderAccent}`, background: T.bgCard, color: T.text, fontSize: 10, fontFamily: "inherit" }}>
               {["Lũ lụt", "Sạt lở", "Bão", "Cháy rừng", "Tuần tra biển", "Tùy chỉnh"].map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <textarea value={scenarioInput} onChange={e => setScenarioInput(e.target.value)} placeholder="VD: Lũ lụt tại Quảng Bình, 15 điểm dân cư bị cô lập, gió cấp 8..." rows={4} style={{ width: "100%", padding: "8px 10px", marginBottom: 12, borderRadius: 6, border: "1px solid #333", background: "#0a0a0a", color: "#c0d0e0", fontSize: 10, fontFamily: "inherit", resize: "vertical" }} />
+            <textarea value={scenarioInput} onChange={e => setScenarioInput(e.target.value)} placeholder="VD: Lũ lụt tại Quảng Bình, 15 điểm dân cư bị cô lập, gió cấp 8..." rows={4} style={{ width: "100%", padding: "8px 10px", marginBottom: 12, borderRadius: 6, border: `1px solid ${T.borderAccent}`, background: T.bgCard, color: T.text, fontSize: 10, fontFamily: "inherit", resize: "vertical" }} />
             <button onClick={generateScenario} disabled={!scenarioInput.trim()} style={{ width: "100%", padding: "10px 0", borderRadius: 6, border: "1px solid #a855f740", background: "#a855f720", color: "#a855f7", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}>AI PHÂN TÍCH VÀ TẠO KỊCH BẢN</button>
           </>}
         </div>
       </div>}
       {/* AI Advice Toast */}
-      {aiAdvice && aiAdvice !== "loading" && <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: "#0c1525ee", border: "1px solid #a855f740", borderRadius: 8, padding: "10px 16px", maxWidth: 400, zIndex: 100, fontFamily: "inherit" }}>
+      {aiAdvice && aiAdvice !== "loading" && <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: T.bgOverlay, border: "1px solid #a855f740", borderRadius: 8, padding: "10px 16px", maxWidth: 400, zIndex: 100, fontFamily: "inherit" }}>
         <div style={{ fontSize: 9, fontWeight: 700, color: "#a855f7", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>🎖️ {VI.aiAdvisor}</div>
-        {aiAdvice.map((a, i) => <div key={i} style={{ fontSize: 9, color: "#c0d0e0", marginBottom: 3 }}>{i + 1}. {a}</div>)}
+        {aiAdvice.map((a, i) => <div key={i} style={{ fontSize: 9, color: T.text, marginBottom: 3 }}>{i + 1}. {a}</div>)}
       </div>}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${T.borderAccent};border-radius:3px}button:hover{filter:brightness(1.1)}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}input[type=range]{appearance:none;background:${T.border};border-radius:2px;outline:none}input[type=range]::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:${T.accent};cursor:pointer}`}</style>
     </div>
