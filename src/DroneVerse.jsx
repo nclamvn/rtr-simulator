@@ -1887,7 +1887,7 @@ Format as plain text, no markdown.`;
               <div style={{ color: "#00cc66" }}>🟢 P3: {mis.victims.filter(v=>v.priority===3).reduce((s,v)=>s+v.people,0)} người ({mis.victims.filter(v=>v.priority===3).length} cụm)</div>
             </div>}
           </div>}
-          <div style={{ flex: 1, display: "flex", gap: 1, padding: 1, background: T.bgCard }}>
+          <div style={{ flex: 1, display: "flex", gap: 1, padding: 1, background: T.bgCard, minHeight: 0, overflow: "hidden" }}>
             {vw === "map" && <div style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
               {/* MAP 60% — absolute fill */}
               <div style={{ width: "60%", position: "relative" }}>
@@ -1967,7 +1967,7 @@ Format as plain text, no markdown.`;
             </div>}
           </div>
           {/* BOTTOM */}
-          <div style={{ height: 150, borderTop: `1px solid ${T.border}`, display: "flex", background: T.bgPanel }}>
+          <div style={{ height: 150, flexShrink: 0, borderTop: `1px solid ${T.border}`, display: "flex", background: T.bgPanel, overflow: "hidden" }}>
             <div style={{ width: 270, borderRight: `1px solid ${T.border}`, padding: "6px 10px", overflow: "auto" }}>
               <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Crosshair size={12} /> {sd ? VI.track : VI.noTrk}</div>
               {sd ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 10px" }}>
@@ -1994,7 +1994,7 @@ Format as plain text, no markdown.`;
                 </div>
               ))}
             </div>
-            <div style={{ width: 220, borderLeft: `1px solid ${T.border}`, padding: "6px 8px", overflow: "auto" }}>
+            <div style={{ width: 220, borderLeft: `1px solid ${T.border}`, padding: "6px 8px", overflow: "auto", height: "100%", minHeight: 0 }}>
               <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Activity size={12} /> {VI.log}</div>
               {logs.map((l, i) => <div key={i} style={{ fontSize: 13, padding: "2px 4px", marginBottom: 2, borderLeft: `2px solid ${l.l === "success" ? T.success : l.l === "warning" ? T.warn : T.border}`, color: T.textDim, lineHeight: 1.4 }}><span style={{ color: T.textMuted, marginRight: 4 }}>{new Date(l.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>{l.m}</div>)}
             </div>
