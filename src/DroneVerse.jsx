@@ -5,12 +5,27 @@ import {
   Cpu, Gauge, Activity, Layers, Clock, Users, Box, ArrowUpRight,
   BarChart3, Compass, Maximize2, Eye, MapPin, FileText, Plus, Copy, X,
   Wind, UserPlus, Home, Shuffle, CircleDot, Film, Volume2, CheckCircle, Circle,
-  Brain, GitBranch,
+  Brain, GitBranch, Sparkles,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from "recharts";
 
 const PI2 = Math.PI * 2;
 const DEG = Math.PI / 180;
+
+const VI = {
+  missions: "NHIỆM VỤ", fleet: "ĐỘI HÌNH", god: "CHỈ HUY", track: "THEO DÕI", noTrk: "CHƯA CHỌN",
+  log: "NHẬT KÝ", battery: "PIN", altitude: "ĐỘ CAO", speed: "TỐC ĐỘ", signal: "TÍN HIỆU",
+  heading: "HƯỚNG", bank: "NGHIÊNG", pause: "DỪNG", run: "CHẠY",
+  friendly: "TA", hostile: "ĐỊCH", rescue: "CỨU HỘ", phase: "GIAI ĐOẠN", objective: "MỤC TIÊU",
+  elapsed: "T.GIAN", weather: "THỜI TIẾT", adversary: "ĐỐI PHƯƠNG", electronic: "TÁC CHIẾN ĐT",
+  fleetCmd: "LỆNH ĐỘI HÌNH", inject: "+ ĐE DỌA", spawnBogey: "MỤC TIÊU", gpsDeny: "CHẶN GPS",
+  rtb: "VỀ CĂN CỨ", scatter: "PHÂN TÁN", formUp: "TẬP HỢP", report: "BÁO CÁO",
+  aiDebrief: "AI PHÂN TÍCH", aiScenario: "AI TẠO KỊCH BẢN", aiAdvisor: "AI CỐ VẤN",
+  graph: "ĐỒ THỊ TRI THỨC", emergence: "HÀNH VI NỔI TRỘI", experience: "KINH NGHIỆM",
+  agentMem: "BỘ NHỚ AGENT", demo: "DEMO", missionComplete: "NHIỆM VỤ HOÀN THÀNH",
+  subtitle: "Hệ thống mô phỏng UAV đa nhiệm vụ",
+  clickTrack: "Chọn drone để theo dõi", selectMission: "Chọn nhiệm vụ",
+};
 
 const DRONE_SPECS = {
   "HERA-S": { name: "HERA Scout", maxSpeed: 22, cruiseSpeed: 15, maxAlt: 500, endurance: 45, rcs: 0.01, sensors: ["EO/IR","LiDAR"], color: "#00e5ff", iff: "FRIENDLY" },
@@ -846,6 +861,91 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd }
 // MISSIONS
 // ═══════════════════════════════════════════
 const MISSIONS = [
+  // ── RESCUE PRESET MISSIONS (Demo Bộ Quốc Phòng) ──
+  { id: "flood_qb", name: "Lũ lụt Quảng Bình", domain: "RESCUE", icon: Sparkles, multi: true,
+    desc: "4 giai đoạn: trinh sát → xác định nạn nhân → cứu hộ → rút lui",
+    drones: Array.from({ length: 6 }, (_, i) => ({ id: `TS-${i+1}`, type: "HERA-S", x: -20+i*8, y: -20, alt: 150, hdg: 45 })),
+    waypoints: [{ x: 200, y: 150, alt: 150 }, { x: -150, y: 200, alt: 140 }, { x: 250, y: -100, alt: 160 }, { x: -200, y: -150, alt: 130 }, { x: 100, y: 250, alt: 150 }, { x: -100, y: 100, alt: 140 }],
+    threats: [{ x: 200, y: 150, radius: 80, type: "Vùng ngập sâu" }, { x: -150, y: 250, radius: 50, type: "Sạt lở" }],
+    phases: [
+      { name: "Trinh sát vùng lũ", briefing: "6 drone trinh sát 6 điểm dân cư bị cô lập",
+        weather: { windSpeed: 15, windDir: 90 },
+        objectives: [{ id: "scout", desc: "Trinh sát 6 điểm dân cư", check: (dr) => dr.filter(d=>d.spec.iff==="FRIENDLY"&&d.status==="ACTIVE").every(d=>d.fd.speed>3) }],
+        transition: (pt) => pt > 20 },
+      { name: "Xác định nạn nhân", briefing: "Tăng cường tìm kiếm, định vị cụm nạn nhân",
+        spawns: [{ id: "TS-7", type: "HERA-S", x: 0, y: -30, alt: 150, hdg: 45 }, { id: "TS-8", type: "HERA-S", x: 10, y: -30, alt: 150, hdg: 45 }],
+        waypoints: [{ x: 180, y: 120, alt: 130 }, { x: -120, y: 180, alt: 120 }, { x: 220, y: -80, alt: 140 }, { x: -180, y: -120, alt: 130 }],
+        threats: [{ x: 50, y: 100, radius: 60, type: "Gió giật" }],
+        objectives: [{ id: "locate", desc: "Định vị 4 cụm nạn nhân", check: (dr) => { const f=dr.filter(d=>d.spec.iff==="FRIENDLY"&&d.status==="ACTIVE"&&d.memory); return f.length>0&&f.reduce((s,d)=>s+d.memory.sectorsVisited.size,0)/f.length>=4; } }],
+        transition: (_,__,___,os) => os["locate"] },
+      { name: "Cứu hộ & Vận chuyển", briefing: "4 drone cargo + 2 hộ tống triển khai cứu trợ",
+        spawns: [
+          { id: "CH-1", type: "HERA-C", x: 0, y: -40, alt: 100, hdg: 45 }, { id: "CH-2", type: "HERA-C", x: 10, y: -40, alt: 100, hdg: 45 },
+          { id: "CH-3", type: "HERA-C", x: 20, y: -40, alt: 100, hdg: 45 }, { id: "CH-4", type: "HERA-C", x: 30, y: -40, alt: 100, hdg: 45 },
+          { id: "HT-1", type: "VEGA-X", x: -10, y: -50, alt: 160, hdg: 45 }, { id: "HT-2", type: "VEGA-X", x: 40, y: -50, alt: 160, hdg: 45 },
+        ],
+        cargoWP: [{ x: 180, y: 120, alt: 100 }, { x: -120, y: 180, alt: 100 }, { x: 220, y: -80, alt: 100 }, { x: -180, y: -120, alt: 100 }],
+        objectives: [{ id: "deliver", desc: "Giao hàng cứu trợ 4 điểm", check: (dr) => { const c=dr.filter(d=>d.typeKey==="HERA-C"&&d.status==="ACTIVE"); return c.length>0&&c.every(d=>{ const wp=[[180,120],[-120,180],[220,-80],[-180,-120]]; return wp.some(w=>Math.hypot(d.fd.x-w[0],d.fd.y-w[1])<40); }); } }],
+        transition: (_,__,___,os) => os["deliver"] },
+      { name: "Rút lui an toàn", briefing: "Toàn bộ fleet RTB về Sở Chỉ Huy",
+        waypoints: [{ x: 0, y: 0, alt: 120 }], clearThreats: true,
+        weather: { windSpeed: 5, windDir: 90 },
+        objectives: [{ id: "rtb_safe", desc: "80% fleet về căn cứ", check: (dr) => { const f=dr.filter(d=>d.spec.iff==="FRIENDLY"&&d.status==="ACTIVE"); return f.filter(d=>Math.hypot(d.fd.x,d.fd.y)<80).length>=f.length*0.8; } }],
+        transition: (_,__,___,os) => os["rtb_safe"] },
+    ],
+  },
+  { id: "landslide_qn", name: "Sạt lở Quảng Nam", domain: "RESCUE", icon: Sparkles, multi: true,
+    desc: "3 giai đoạn: đánh giá → tìm kiếm → vận chuyển y tế",
+    drones: Array.from({ length: 4 }, (_, i) => ({ id: `SL-S${i+1}`, type: "HERA-S", x: -10+i*8, y: -15, alt: 140, hdg: 30 })),
+    waypoints: [{ x: 150, y: 180, alt: 120 }, { x: 200, y: 220, alt: 130 }, { x: 100, y: 250, alt: 120 }],
+    threats: [{ x: 180, y: 200, radius: 100, type: "Sạt lở chính" }, { x: 120, y: 280, radius: 70, type: "Nguy cơ sạt thêm" }],
+    phases: [
+      { name: "Đánh giá hiện trường", briefing: "4 drone trinh sát vùng sạt lở",
+        weather: { windSpeed: 8, windDir: 45 },
+        objectives: [{ id: "assess", desc: "Đánh giá hiện trường sạt lở", check: () => true }],
+        transition: (pt) => pt > 15 },
+      { name: "Tìm kiếm người mất tích", briefing: "Quét toàn bộ khu vực — tìm nạn nhân",
+        spawns: [
+          ...Array.from({ length: 4 }, (_, i) => ({ id: `SL-S${i+5}`, type: "HERA-S", x: i*10, y: -25, alt: 130, hdg: 30 })),
+          { id: "SL-C1", type: "HERA-C", x: -20, y: -30, alt: 100, hdg: 30 }, { id: "SL-C2", type: "HERA-C", x: 20, y: -30, alt: 100, hdg: 30 },
+        ],
+        waypoints: [{ x: 100, y: 150, alt: 100 }, { x: 200, y: 150, alt: 110 }, { x: 200, y: 250, alt: 100 }, { x: 100, y: 250, alt: 110 }],
+        objectives: [{ id: "search", desc: "Quét 10/16 sectors", check: (dr) => { const f=dr.filter(d=>d.spec.iff==="FRIENDLY"&&d.status==="ACTIVE"&&d.memory); const total=new Set(); f.forEach(d=>d.memory.sectorsVisited.forEach(s=>total.add(s))); return total.size>=10; } }],
+        transition: (_,__,___,os) => os["search"] },
+      { name: "Vận chuyển cấp cứu", briefing: "HERA-C bay đến 3 điểm y tế",
+        cargoWP: [{ x: 150, y: 180, alt: 80 }, { x: 200, y: 220, alt: 80 }, { x: 100, y: 250, alt: 80 }],
+        clearThreats: true,
+        objectives: [{ id: "medevac", desc: "Hoàn thành 3 chuyến y tế", check: (dr) => { const c=dr.filter(d=>d.typeKey==="HERA-C"&&d.status==="ACTIVE"); return c.length>0&&c.every(d=>[[150,180],[200,220],[100,250]].some(w=>Math.hypot(d.fd.x-w[0],d.fd.y-w[1])<40)); } }],
+        transition: (_,__,___,os) => os["medevac"] },
+    ],
+  },
+  { id: "patrol_ts", name: "Tuần tra Trường Sa", domain: "MIL", icon: Shield, multi: true,
+    desc: "3 giai đoạn: trinh sát biển → phát hiện tàu lạ → báo cáo RTB",
+    drones: [
+      ...Array.from({ length: 6 }, (_, i) => ({ id: `TT-S${i+1}`, type: "HERA-S", x: -30+i*12, y: -20, alt: 200, hdg: 0 })),
+      { id: "TT-V1", type: "VEGA-X", x: -20, y: -40, alt: 250, hdg: 0 }, { id: "TT-V2", type: "VEGA-X", x: 20, y: -40, alt: 250, hdg: 0 },
+    ],
+    waypoints: [{ x: -250, y: -250, alt: 200 }, { x: 250, y: -250, alt: 200 }, { x: 250, y: 250, alt: 200 }, { x: -250, y: 250, alt: 200 }],
+    threats: [], phases: [
+      { name: "Trinh sát vùng biển", briefing: "8 drone tuần tra vùng biển Trường Sa",
+        weather: { windSpeed: 12, windDir: 180 },
+        objectives: [{ id: "patrol", desc: "Hoàn thành vòng tuần tra", check: () => true }],
+        transition: (pt) => pt > 20 },
+      { name: "Phát hiện tàu lạ", briefing: "4 tàu không xác định — VEGA-X tiếp cận xác minh",
+        spawns: [
+          { id: "TL-1", type: "BOGEY", x: 320, y: 280, alt: 150, hdg: 225 }, { id: "TL-2", type: "BOGEY", x: 300, y: -300, alt: 160, hdg: 135 },
+          { id: "TL-3", type: "BOGEY", x: -310, y: 270, alt: 140, hdg: 315 }, { id: "TL-4", type: "BOGEY", x: -290, y: -280, alt: 170, hdg: 45 },
+        ],
+        threats: [{ x: 0, y: 200, radius: 90, type: "Vùng tranh chấp" }],
+        objectives: [{ id: "identify", desc: "Xác minh 4 mục tiêu", check: (dr) => { const h=dr.filter(d=>d.id.startsWith("TL")); return h.length>0&&h.every(d=>d.status==="ELIMINATED"); } }],
+        transition: (_,__,___,os) => os["identify"] },
+      { name: "Báo cáo & RTB", briefing: "Hoàn thành báo cáo — fleet về căn cứ",
+        waypoints: [{ x: 0, y: 0, alt: 150 }], clearThreats: true,
+        objectives: [{ id: "rtb_ts", desc: "80% fleet RTB an toàn", check: (dr) => { const f=dr.filter(d=>d.spec.iff==="FRIENDLY"&&d.status==="ACTIVE"); return f.filter(d=>Math.hypot(d.fd.x,d.fd.y)<80).length>=f.length*0.8; } }],
+        transition: (_,__,___,os) => os["rtb_ts"] },
+    ],
+  },
+  // ── EXISTING MISSIONS ──
   { id: "alpha", name: "Alpha Recon", domain: "MIL", icon: Target, desc: "8 drones ISR — 1 BOGEY in AO",
     drones: [
       { id: "HERA-01", type: "HERA-S", x: -50, y: -50, alt: 200, hdg: 45 }, { id: "HERA-02", type: "HERA-S", x: -30, y: -60, alt: 180, hdg: 50 },
@@ -1018,8 +1118,15 @@ export default function DroneVerse() {
   const [emergenceFeed, setEmergenceFeed] = useState([]);
   const [graphStats, setGraphStats] = useState(null);
   const [showGraphOverlay, setShowGraphOverlay] = useState(false);
-  const [aiDebrief, setAiDebrief] = useState(null); // null | "loading" | string
-  const [showAiModal, setShowAiModal] = useState(false); // { name, briefing, idx, total, objectives, status }
+  const [aiDebrief, setAiDebrief] = useState(null);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [showScenarioModal, setShowScenarioModal] = useState(false);
+  const [scenarioInput, setScenarioInput] = useState("");
+  const [scenarioType, setScenarioType] = useState("Lũ lụt");
+  const [scenarioLoading, setScenarioLoading] = useState(false);
+  const [aiAdvice, setAiAdvice] = useState(null); // null | "loading" | string[]
+  const [adviceCooldown, setAdviceCooldown] = useState(0);
+  const [missionComplete, setMissionComplete] = useState(false); // { name, briefing, idx, total, objectives, status }
 
   const log = useCallback((m, l = "info") => setLogs(p => [{ m, l, t: Date.now() }, ...p].slice(0, 40)), []);
 
@@ -1066,14 +1173,95 @@ export default function DroneVerse() {
       phaseRef.current = pe;
       const p0 = pe.getCurrentPhase();
       setPhaseInfo({ name: p0.name, briefing: p0.briefing, idx: 0, total: m.phases.length, objectives: p0.objectives || [], status: pe.objectiveStatus });
-      log(`═══ PHASE 1: ${p0.name} ═══`, "success");
+      log(`🚁 ${VI.phase} 1: ${p0.name} — ${p0.briefing}`, "success");
+      if (p0.weather) { setWindDir(p0.weather.windDir); setWindSpd(p0.weather.windSpeed);
+        const wx = Math.sin(p0.weather.windDir * DEG) * p0.weather.windSpeed;
+        const wy = Math.cos(p0.weather.windDir * DEG) * p0.weather.windSpeed;
+        for (const dd of s.drones) { dd.fd.windX = wx; dd.fd.windY = wy; } }
     } else {
       phaseRef.current = null;
       setPhaseInfo(null);
     }
     log(`MISSION: ${m.name}`, "success"); log(`${m.drones.length} units — ${m.desc}`, "info");
-    if (m.threats.length) log(`${m.threats.length} THREAT(S) detected`, "warning");
+    if (m.threats.length) log(`⚠️ ${m.threats.length} mối đe dọa phát hiện`, "warning");
   }, [log]);
+
+  // Auto-demo: 1-click launch Lũ lụt QB + cinematic + weather
+  const startDemo = useCallback(() => {
+    const m = MISSIONS[0]; // Lũ lụt Quảng Bình
+    launch(m);
+    setTimeout(() => { setCamMode("cinematic"); setWindDir(90); setWindSpd(15);
+      const wx = Math.sin(90 * DEG) * 15, wy = Math.cos(90 * DEG) * 15;
+      for (const d of swRef.current.drones) { d.fd.windX = wx; d.fd.windY = wy; }
+    }, 200);
+  }, [launch]);
+
+  // AI Scenario Generator
+  const generateScenario = useCallback(async () => {
+    setScenarioLoading(true);
+    try {
+      const prompt = `Bạn là chuyên gia tác chiến drone của Quân đội Nhân dân Việt Nam, chuyên về cứu hộ cứu nạn.\n\nTình huống: ${scenarioInput}\nLoại: ${scenarioType}\n\nTạo kịch bản mô phỏng dưới dạng JSON thuần (KHÔNG markdown, KHÔNG \`\`\`):\n{"missionName":"tên tiếng Việt","briefing":"mô tả 2 câu","domain":"RESCUE","phases":[{"name":"tên phase","briefing":"mô tả","drones":[{"id":"XX-1","type":"HERA-S","x":0,"y":-20,"alt":150,"hdg":0}],"waypoints":[{"x":200,"y":150,"alt":120}],"threats":[{"x":200,"y":150,"radius":80,"type":"Vùng ngập sâu"}],"objectives":["mục tiêu 1"],"transitionType":"time","transitionTime":20}]}\n\nQuy tắc: HERA-S trinh sát nhanh, HERA-C vận chuyển chậm, VEGA-X hộ tống. 3-4 phases. 8-16 drones. Origin (0,0) = sở chỉ huy. Vùng thiên tai 200-350m.`;
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 2000, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!resp.ok) throw new Error(`API ${resp.status}`);
+      const data = await resp.json();
+      let text = data.content?.[0]?.text || "";
+      // Strip markdown code blocks if present
+      text = text.replace(/```json?\s*/g, "").replace(/```\s*/g, "").trim();
+      const scenario = JSON.parse(text);
+      // Convert to mission format
+      const drones = scenario.phases[0]?.drones || [{ id: "AI-1", type: "HERA-S", x: 0, y: -20, alt: 150, hdg: 0 }];
+      const mission = {
+        id: `ai-${Date.now()}`, name: scenario.missionName || "AI Mission", domain: scenario.domain || "RESCUE", icon: Brain, multi: true,
+        desc: scenario.briefing || "Kịch bản AI", drones, waypoints: scenario.phases[0]?.waypoints || [], threats: scenario.phases[0]?.threats || [],
+        phases: scenario.phases.map((p, i) => ({
+          name: p.name, briefing: p.briefing,
+          spawns: i > 0 ? (p.drones || []) : undefined,
+          waypoints: i > 0 ? p.waypoints : undefined,
+          threats: p.threats && i > 0 ? p.threats : undefined,
+          weather: p.weather,
+          objectives: (p.objectives || []).map((desc, j) => ({ id: `ai-obj-${i}-${j}`, desc, check: () => false })),
+          transition: p.transitionType === "time" ? (pt) => pt > (p.transitionTime || 20) : (pt) => pt > 30,
+        })),
+      };
+      setShowScenarioModal(false);
+      launch(mission);
+      setCamMode("cinematic");
+    } catch (err) {
+      log(`Lỗi tạo kịch bản: ${err.message}`, "warning");
+      setScenarioLoading(false);
+    }
+  }, [scenarioInput, scenarioType, launch, log]);
+
+  // AI Tactical Advisor
+  const requestAdvice = useCallback(async () => {
+    if (adviceCooldown > 0) return;
+    setAiAdvice("loading");
+    setAdviceCooldown(30);
+    const cd = setInterval(() => setAdviceCooldown(c => { if (c <= 1) { clearInterval(cd); return 0; } return c - 1; }), 1000);
+    try {
+      const drones = swRef.current.drones.filter(d => d.status === "ACTIVE");
+      const weakest = drones.filter(d => d.spec.iff === "FRIENDLY").sort((a, b) => a.fd.battery - b.fd.battery)[0];
+      const pe = phaseRef.current;
+      const prompt = `Bạn là cố vấn tác chiến drone QĐND Việt Nam.\n\nNhiệm vụ: ${mis?.name}\nPhase: ${pe ? `${pe.currentPhase+1}/${pe.phases.length} — ${pe.getCurrentPhase()?.name}` : "Đơn phase"}\nFleet: ${drones.filter(d=>d.spec.iff==="FRIENDLY").length} drone, ${drones.filter(d=>d.spec.iff==="HOSTILE").length} đối phương\nPin TB: ${Math.round(drones.reduce((s,d)=>s+d.fd.battery,0)/Math.max(1,drones.length))}%\nGió: ${windSpd}m/s\nĐe dọa: ${swRef.current.threats.map(t=>t.type).join(", ")||"Không"}\nDrone yếu nhất: ${weakest?`${weakest.id} (pin ${Math.round(weakest.fd.battery)}%)`:"N/A"}\n\n3 khuyến nghị chiến thuật ngắn (tiếng Việt). JSON: {"advice":["1","2","3"]}`;
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", headers: { "Content-Type": "application/json", "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!resp.ok) throw new Error(`API ${resp.status}`);
+      const data = await resp.json();
+      let text = data.content?.[0]?.text || "{}";
+      text = text.replace(/```json?\s*/g, "").replace(/```\s*/g, "").trim();
+      const parsed = JSON.parse(text);
+      setAiAdvice(parsed.advice || ["Không có khuyến nghị"]);
+      setTimeout(() => setAiAdvice(null), 10000);
+    } catch {
+      setAiAdvice(["Cố vấn AI không khả dụng — kiểm tra kết nối"]);
+      setTimeout(() => setAiAdvice(null), 5000);
+    }
+  }, [mis, windSpd, adviceCooldown]);
 
   const addWaypoint = useCallback((wx, wy) => {
     const wp = { x: wx, y: wy, alt: 200 };
@@ -1272,8 +1460,9 @@ Format as plain text, no markdown.`;
           const result = pe.checkTransition(newE, swRef.current.drones, swRef.current.threats);
           if (result) {
             if (result.type === "MISSION_COMPLETE") {
-              setPhaseInfo(pi => pi ? { ...pi, name: "COMPLETE", briefing: "Mission accomplished" } : pi);
-              setLogs(p => [{ m: "═══ MISSION COMPLETE ═══", l: "success", t: Date.now() }, ...p].slice(0, 40));
+              setPhaseInfo(pi => pi ? { ...pi, name: VI.missionComplete, briefing: "Toàn bộ fleet về căn cứ an toàn" } : pi);
+              setLogs(p => [{ m: `✅ ${VI.missionComplete} — Toàn bộ fleet về căn cứ an toàn`, l: "success", t: Date.now() }, ...p].slice(0, 40));
+              setMissionComplete(true); setTimeout(() => setMissionComplete(false), 3000);
             } else if (result.type === "PHASE_ADVANCE") {
               const ph = result.phase;
               // Apply phase waypoints
@@ -1290,8 +1479,15 @@ Format as plain text, no markdown.`;
                 const cargos = swRef.current.drones.filter(d => d.typeKey === "HERA-C" && d.status === "ACTIVE");
                 cargos.forEach((c, i) => swRef.current.perDroneWP.set(c.id, ph.cargoWP[Math.min(i, ph.cargoWP.length - 1)]));
               }
+              // Weather
+              if (ph.weather) {
+                setWindDir(ph.weather.windDir); setWindSpd(ph.weather.windSpeed);
+                const wx = Math.sin(ph.weather.windDir * DEG) * ph.weather.windSpeed;
+                const wy = Math.cos(ph.weather.windDir * DEG) * ph.weather.windSpeed;
+                for (const dd of swRef.current.drones) { dd.fd.windX = wx; dd.fd.windY = wy; }
+              }
               setPhaseInfo({ name: ph.name, briefing: ph.briefing, idx: pe.currentPhase, total: pe.phases.length, objectives: ph.objectives || [], status: pe.objectiveStatus });
-              setLogs(p => [{ m: `═══ PHASE ${pe.currentPhase + 1}: ${ph.name} ═══`, l: "success", t: Date.now() }, ...p].slice(0, 40));
+              setLogs(p => [{ m: `🚁 ${VI.phase} ${pe.currentPhase + 1}: ${ph.name} — ${ph.briefing}`, l: "success", t: Date.now() }, ...p].slice(0, 40));
             }
           }
           // Update phase info objectives display
@@ -1372,11 +1568,15 @@ Format as plain text, no markdown.`;
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "#000000", color: "#c8d6e5", fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 11, overflow: "hidden" }}>
       {/* TOP */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 14px", borderBottom: "1px solid #222", background: "#000000" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 14px", borderBottom: missionComplete ? "2px solid #00e878" : "1px solid #222", background: "#000000", transition: "border-color 0.5s" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Radar size={16} color="#00e5ff" /><span style={{ fontSize: 13, fontWeight: 700, color: "#00e5ff", letterSpacing: 2 }}>RTR DRONEVERSE</span>
-          <span style={{ fontSize: 9, color: "#7090b0", padding: "1px 6px", border: "1px solid #333", borderRadius: 3 }}>v2.1</span>
-          {mis && <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 3, background: mis.domain === "MIL" ? "#ff3b5c30" : "#00e5ff50", color: mis.domain === "MIL" ? "#ff3b5c" : "#00e5ff" }}>{mis.domain} — {mis.name}</span>}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}><Radar size={16} color="#00e5ff" /><span style={{ fontSize: 13, fontWeight: 700, color: "#00e5ff", letterSpacing: 2 }}>RTR DRONEVERSE</span></div>
+            <div style={{ fontSize: 7, color: "#556070", marginTop: -1, marginLeft: 22 }}>{VI.subtitle}</div>
+          </div>
+          <button onClick={startDemo} style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", borderRadius: 5, border: "1px solid #00e87860", background: "#00e87820", color: "#00e878", cursor: "pointer", fontSize: 9, fontWeight: 700, fontFamily: "inherit" }}><Play size={10} /> {VI.demo}</button>
+          <button onClick={() => setShowScenarioModal(true)} style={{ display: "flex", alignItems: "center", gap: 3, padding: "4px 10px", borderRadius: 5, border: "1px solid #a855f760", background: "#a855f720", color: "#a855f7", cursor: "pointer", fontSize: 9, fontWeight: 700, fontFamily: "inherit" }}><Brain size={10} /> {VI.aiScenario}</button>
+          {mis && <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 8px", borderRadius: 3, background: mis.domain === "RESCUE" ? "#00e87820" : mis.domain === "MIL" ? "#ff3b5c30" : "#00e5ff50", color: mis.domain === "RESCUE" ? "#00e878" : mis.domain === "MIL" ? "#ff3b5c" : "#00e5ff" }}>{mis.domain === "RESCUE" ? VI.rescue : mis.domain} — {mis.name}</span>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Clock size={12} color="#7090b0" /><span style={{ color: "#90b0d0", fontVariantNumeric: "tabular-nums" }}>T+{String(Math.floor(elapsed / 60)).padStart(2, "0")}:{String(Math.floor(elapsed % 60)).padStart(2, "0")}</span></div>
@@ -1395,17 +1595,17 @@ Format as plain text, no markdown.`;
         {/* LEFT */}
         <div style={{ width: 220, borderRight: "1px solid #222", display: "flex", flexDirection: "column", background: "#000000" }}>
           <div style={{ padding: 8, borderBottom: "1px solid #222", maxHeight: 280, overflow: "auto" }}>
-            <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><Target size={10} /> MISSIONS ({MISSIONS.length})</div>
+            <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><Target size={10} /> {VI.missions} ({MISSIONS.length})</div>
             {MISSIONS.map(m => { const I = m.icon, a = mis?.id === m.id; return <button key={m.id} onClick={() => launch(m)} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 6, border: a ? "1px solid #00e5ff60" : "1px solid #333", background: a ? "#00e5ff18" : "#0a0a0a", cursor: "pointer", textAlign: "left", fontFamily: "inherit", color: "#c8d6e5", width: "100%", marginBottom: 3 }}><I size={12} color={a ? "#00e5ff" : "#7090b0"} /><div style={{ flex: 1 }}><div style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ fontSize: 9, fontWeight: 600, color: a ? "#00e5ff" : "#c0d0e0" }}>{m.name}</span>{m.multi && <span style={{ fontSize: 6, padding: "1px 3px", borderRadius: 2, background: "#a855f720", color: "#a855f7", fontWeight: 700 }}>MULTI</span>}</div><div style={{ fontSize: 7, color: "#7090b0", marginTop: 1 }}>{m.desc}</div></div></button>; })}
           </div>
           {mis && <div style={{ padding: "4px 8px", borderBottom: "1px solid #222", display: "flex", gap: 3 }}>
-            <button onClick={injectThreat} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, padding: "5px 0", borderRadius: 5, border: "1px solid #ff3b5c40", background: "#ff3b5c12", color: "#ff5070", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit" }}><Plus size={10} /> THREAT</button>
+            <button onClick={injectThreat} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 3, padding: "5px 0", borderRadius: 5, border: "1px solid #ff3b5c40", background: "#ff3b5c12", color: "#ff5070", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit" }}><Plus size={10} /> {VI.inject}</button>
             <button onClick={() => setSideTab("fleet")} style={{ padding: "5px 8px", borderRadius: 5, border: "none", cursor: "pointer", background: sideTab === "fleet" ? "#00e5ff25" : "#0a0a0a", color: sideTab === "fleet" ? "#00e5ff" : "#7090b0", fontSize: 8, fontWeight: 600, fontFamily: "inherit" }}><Plane size={10} /></button>
             <button onClick={() => setSideTab("god")} style={{ padding: "5px 8px", borderRadius: 5, border: "none", cursor: "pointer", background: sideTab === "god" ? "#ffb02025" : "#0a0a0a", color: sideTab === "god" ? "#ffb020" : "#7090b0", fontSize: 8, fontWeight: 600, fontFamily: "inherit" }}><Zap size={10} /></button>
           </div>}
           <div style={{ flex: 1, overflow: "auto", padding: 8 }}>
             {sideTab === "fleet" ? <>
-              <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><Plane size={10} /> FLEET ({dr.length})</div>
+              <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}><Plane size={10} /> {VI.fleet} ({dr.length})</div>
               {dr.map(d => (
                 <div key={d.id} onClick={() => setSel(d.id)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 6px", borderRadius: 4, cursor: "pointer", background: sel === d.id ? "#00e5ff18" : "transparent", border: sel === d.id ? "1px solid #00e5ff50" : "1px solid transparent", marginBottom: 1 }}>
                   <div style={{ width: 6, height: 6, borderRadius: "50%", background: d.spec.color, boxShadow: `0 0 4px ${d.spec.color}60`, flexShrink: 0 }} />
@@ -1415,10 +1615,10 @@ Format as plain text, no markdown.`;
                 </div>
               ))}
             </> : <>
-              <div style={{ fontSize: 9, color: "#ffb020", letterSpacing: 1, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}><Zap size={10} /> GOD MODE</div>
+              <div style={{ fontSize: 9, color: "#ffb020", letterSpacing: 1, marginBottom: 8, display: "flex", alignItems: "center", gap: 4 }}><Zap size={10} /> {VI.god}</div>
               {/* Weather Control */}
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><Wind size={9} /> WEATHER</div>
+                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><Wind size={9} /> {VI.weather}</div>
                 <div style={{ fontSize: 8, color: "#90b0d0", marginBottom: 2 }}>Wind Dir: {windDir}° ({compassLabel(windDir)})</div>
                 <input type="range" min={0} max={360} value={windDir} onChange={e => { const v = +e.target.value; setWindDir(v); applyWind(v, windSpd); if (windSpd > 0) log(`WIND: ${windSpd}m/s from ${compassLabel(v)}`, "info"); }} style={{ width: "100%", height: 4, accentColor: "#00e5ff" }} />
                 <div style={{ fontSize: 8, color: "#90b0d0", marginBottom: 2, marginTop: 4 }}>Wind Spd: {windSpd} m/s</div>
@@ -1426,7 +1626,7 @@ Format as plain text, no markdown.`;
               </div>
               {/* Adversary Spawn */}
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><UserPlus size={9} /> ADVERSARY</div>
+                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><UserPlus size={9} /> {VI.adversary}</div>
                 <div style={{ display: "flex", gap: 4 }}>
                   <button onClick={() => spawnBogey(1)} style={{ flex: 1, padding: "5px 0", borderRadius: 5, border: "1px solid #ff6b3540", background: "#ff6b3512", color: "#ff6b35", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit" }}>BOGEY</button>
                   <button onClick={() => spawnBogey(3)} style={{ flex: 1, padding: "5px 0", borderRadius: 5, border: "1px solid #ff6b3540", background: "#ff6b3512", color: "#ff6b35", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit" }}>BOGEY x3</button>
@@ -1434,21 +1634,21 @@ Format as plain text, no markdown.`;
               </div>
               {/* GPS Denial */}
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><Radio size={9} /> ELECTRONIC</div>
+                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><Radio size={9} /> {VI.electronic}</div>
                 <button onClick={gpsDeny} style={{ width: "100%", padding: "5px 0", borderRadius: 5, border: "1px solid #a855f740", background: "#a855f712", color: "#a855f7", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit" }}>GPS DENY (origin)</button>
               </div>
               {/* Fleet Commands */}
               <div>
-                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><Navigation size={9} /> FLEET CMD</div>
+                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><Navigation size={9} /> {VI.fleetCmd}</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <button onClick={rtbAll} style={{ padding: "5px 0", borderRadius: 5, border: "1px solid #00e87840", background: "#00e87812", color: "#00e878", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><Home size={9} /> RTB ALL</button>
-                  <button onClick={scatterAll} style={{ padding: "5px 0", borderRadius: 5, border: "1px solid #ffb02040", background: "#ffb02012", color: "#ffb020", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><Shuffle size={9} /> SCATTER</button>
-                  <button onClick={formUp} style={{ padding: "5px 0", borderRadius: 5, border: "1px solid #00e5ff40", background: "#00e5ff12", color: "#00e5ff", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><CircleDot size={9} /> FORM UP</button>
+                  <button onClick={rtbAll} style={{ padding: "5px 0", borderRadius: 5, border: "1px solid #00e87840", background: "#00e87812", color: "#00e878", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><Home size={9} /> {VI.rtb}</button>
+                  <button onClick={scatterAll} style={{ padding: "5px 0", borderRadius: 5, border: "1px solid #ffb02040", background: "#ffb02012", color: "#ffb020", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><Shuffle size={9} /> {VI.scatter}</button>
+                  <button onClick={formUp} style={{ padding: "5px 0", borderRadius: 5, border: "1px solid #00e5ff40", background: "#00e5ff12", color: "#00e5ff", cursor: "pointer", fontSize: 8, fontWeight: 700, fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}><CircleDot size={9} /> {VI.formUp}</button>
                 </div>
               </div>
               {/* Knowledge Graph Stats */}
               {graphStats && <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><GitBranch size={9} /> KNOWLEDGE GRAPH</div>
+                <div style={{ fontSize: 8, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 3 }}><GitBranch size={9} /> {VI.graph}</div>
                 <div style={{ fontSize: 8, color: "#20c080", lineHeight: 1.5 }}>
                   Nodes: {graphStats.nodeCount} | Edges: {graphStats.edgeCount}<br/>
                   {Object.entries(graphStats.types).map(([t, c]) => `${t}: ${c}`).join(" | ")}<br/>
@@ -1459,7 +1659,7 @@ Format as plain text, no markdown.`;
             </>}
           </div>
           <div style={{ padding: 8, borderTop: "1px solid #222", display: "flex", gap: 4 }}>
-            <button onClick={() => setRun(!run)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: `1px solid ${run ? "#00e5ff60" : "#222"}`, background: run ? "#00e5ff25" : "#0a0a0a", color: run ? "#00e5ff" : "#90b0d0", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}>{run ? <Pause size={12} /> : <Play size={12} />}{run ? "PAUSE" : "RUN"}</button>
+            <button onClick={() => setRun(!run)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "8px 0", borderRadius: 6, border: `1px solid ${run ? "#00e5ff60" : "#222"}`, background: run ? "#00e5ff25" : "#0a0a0a", color: run ? "#00e5ff" : "#90b0d0", cursor: "pointer", fontSize: 10, fontWeight: 700, fontFamily: "inherit" }}>{run ? <Pause size={12} /> : <Play size={12} />}{run ? VI.pause : VI.run}</button>
             {mis && <button onClick={() => setShowReport(true)} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #00e5ff40", background: "#00e5ff10", color: "#00e5ff", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center" }}><FileText size={12} /></button>}
             {mis && <button onClick={requestAiDebrief} disabled={aiDebrief === "loading"} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #a855f740", background: aiDebrief === "loading" ? "#a855f725" : "#a855f710", color: "#a855f7", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", fontSize: 8 }}>{aiDebrief === "loading" ? <span style={{ animation: "pulse 1s infinite" }}>...</span> : <Cpu size={12} />}</button>}
             <button onClick={() => { swRef.current = new SwarmController(); setMis(null); setRun(false); setElapsed(0); setSel(null); setTel([]); setLogs([]); setShowReport(false); setSideTab("fleet"); setWindDir(0); setWindSpd(0); setCamMode("orbit"); phaseRef.current = null; setPhaseInfo(null); kgRef.current = null; edRef.current = null; setEmergenceFeed([]); setGraphStats(null); setShowGraphOverlay(false); setAiDebrief(null); setShowAiModal(false); }} style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #222", background: "#0a0a0a", color: "#7090b0", cursor: "pointer", fontFamily: "inherit" }}><RotateCcw size={12} /></button>
@@ -1468,8 +1668,11 @@ Format as plain text, no markdown.`;
         {/* CENTER */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
           {phaseInfo && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 10, background: "#0c1525ee", border: "1px solid #a855f740", borderRadius: 8, padding: "8px 14px", maxWidth: 300, minWidth: 200, fontFamily: "inherit" }}>
-            <div style={{ fontSize: 9, fontWeight: 700, color: "#a855f7", marginBottom: 4 }}>PHASE {phaseInfo.idx + 1}/{phaseInfo.total}: {phaseInfo.name}</div>
-            <div style={{ fontSize: 8, color: "#7090b0", marginBottom: 6 }}>{phaseInfo.briefing}</div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: "#a855f7", marginBottom: 4 }}>{VI.phase} {phaseInfo.idx + 1}/{phaseInfo.total}: {phaseInfo.name}</div>
+            <div style={{ fontSize: 8, color: "#7090b0", marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span>{phaseInfo.briefing}</span>
+              {mis && <button onClick={requestAdvice} disabled={adviceCooldown > 0 || aiAdvice === "loading"} style={{ padding: "2px 6px", borderRadius: 3, border: "1px solid #a855f740", background: "#a855f715", color: adviceCooldown > 0 ? "#556070" : "#a855f7", cursor: adviceCooldown > 0 ? "default" : "pointer", fontSize: 7, fontFamily: "inherit", fontWeight: 700, whiteSpace: "nowrap" }}><Brain size={8} /> {adviceCooldown > 0 ? `${adviceCooldown}s` : VI.aiAdvisor}</button>}
+            </div>
             {phaseInfo.objectives.map(obj => {
               const done = phaseInfo.status?.[obj.id];
               return <div key={obj.id} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 8, marginBottom: 2 }}>
@@ -1488,7 +1691,7 @@ Format as plain text, no markdown.`;
                 ))}
               </div>
               {emergenceFeed.length > 0 && <div style={{ position: "absolute", bottom: 50, left: 8, background: "#0c1525ee", border: "1px solid #a855f730", borderRadius: 6, padding: "5px 8px", maxWidth: 250, zIndex: 2 }}>
-                <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 3, display: "flex", alignItems: "center", gap: 3 }}><Brain size={8} /> EMERGENCE</div>
+                <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 3, display: "flex", alignItems: "center", gap: 3 }}><Brain size={8} /> {VI.emergence}</div>
                 {emergenceFeed.slice(0, 4).map((e, i) => <div key={i} style={{ fontSize: 8, color: "#c0a0e0", marginBottom: 1, opacity: Math.max(0.3, 1 - (Date.now() - e.timestamp) / 8000) }}>⚡ {e.type}: {e.desc}</div>)}
               </div>}
             </div>}
@@ -1504,11 +1707,11 @@ Format as plain text, no markdown.`;
           {/* BOTTOM */}
           <div style={{ height: 140, borderTop: "1px solid #222", display: "flex", background: "#000000" }}>
             <div style={{ width: 250, borderRight: "1px solid #222", padding: "6px 10px", overflow: "auto" }}>
-              <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Crosshair size={10} /> {sd ? "TRACK" : "NO TRK"}</div>
+              <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Crosshair size={10} /> {sd ? VI.track : VI.noTrk}</div>
               {sd ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 10px" }}>
                 {[[Navigation,"HDG",`${Math.round(sd.fd.hdg)}°`,"#c0d0e0"],[Gauge,"SPD",`${sd.fd.speed.toFixed(1)}`,"#00e5ff"],[ArrowUpRight,"ALT",`${Math.round(sd.fd.alt)}m`,"#00e878"],[Activity,"VS",`${sd.fd.vs > 0 ? "+" : ""}${sd.fd.vs.toFixed(1)}`,(sd.fd.vs > 0 ? "#00e878" : "#ff3b5c")],[Battery,"BAT",`${Math.round(sd.fd.battery)}%`,(sd.fd.battery < 25 ? "#ff3b5c" : "#00e878")],[Signal,"SIG",`${Math.round(sd.fd.signal)}%`,(sd.fd.signal < 60 ? "#ffb020" : "#00e5ff")],[Compass,"BNK",`${Math.round(sd.fd.bank)}°`,"#a855f7"],[Shield,"IFF",sd.spec.iff,(sd.spec.iff === "HOSTILE" ? "#ff3b5c" : "#00e878")]].map(([I,k,v,c]) => <div key={k} style={{ display: "flex", alignItems: "center", gap: 4 }}><I size={9} color="#5580a0" /><span style={{ fontSize: 8, color: "#7090b0", width: 26 }}>{k}</span><span style={{ fontSize: 10, fontWeight: 600, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</span></div>)}
               {sd.memory && <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #222", paddingTop: 3, marginTop: 2 }}>
-                <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 2, display: "flex", alignItems: "center", gap: 3 }}><Brain size={7} /> AGENT MEMORY</div>
+                <div style={{ fontSize: 7, color: "#a855f7", letterSpacing: 1, marginBottom: 2, display: "flex", alignItems: "center", gap: 3 }}><Brain size={7} /> {VI.agentMem}</div>
                 <div style={{ fontSize: 8, color: "#7090b0", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                   <span>XP:<b style={{color:"#a855f7"}}>{Math.round(sd.memory.experienceScore)}</b></span>
                   <span>Sec:<b style={{color:"#00e5ff"}}>{sd.memory.sectorsVisited.size}/16</b></span>
@@ -1517,7 +1720,7 @@ Format as plain text, no markdown.`;
                   <span style={{fontSize:7}}>A:{sd.memory.personality.aggression.toFixed(1)} U:{sd.memory.personality.autonomy.toFixed(1)} T:{sd.memory.personality.teamwork.toFixed(1)}</span>
                 </div>
               </div>}
-              </div> : <div style={{ fontSize: 9, color: "#333", padding: 8 }}>Click to track</div>}
+              </div> : <div style={{ fontSize: 9, color: "#333", padding: 8 }}>{VI.clickTrack}</div>}
             </div>
             <div style={{ flex: 1, display: "flex", gap: 1 }}>
               {[{ k: "bat", n: "BATTERY", c: "#00e878" }, { k: "alt", n: "ALTITUDE", c: "#00e5ff" }, { k: "spd", n: "SPEED", c: "#a855f7" }].map(ch => (
@@ -1530,7 +1733,7 @@ Format as plain text, no markdown.`;
               ))}
             </div>
             <div style={{ width: 200, borderLeft: "1px solid #222", padding: "6px 8px", overflow: "auto" }}>
-              <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Activity size={10} /> LOG</div>
+              <div style={{ fontSize: 9, color: "#7090b0", letterSpacing: 1, marginBottom: 4, display: "flex", alignItems: "center", gap: 4 }}><Activity size={10} /> {VI.log}</div>
               {logs.map((l, i) => <div key={i} style={{ fontSize: 8, padding: "2px 4px", marginBottom: 2, borderLeft: `2px solid ${l.l === "success" ? "#00e878" : l.l === "warning" ? "#ffb020" : "#333"}`, color: "#90b0d0", lineHeight: 1.4 }}><span style={{ color: "#5580a0", marginRight: 4 }}>{new Date(l.t).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>{l.m}</div>)}
             </div>
           </div>
@@ -1563,6 +1766,27 @@ Format as plain text, no markdown.`;
           </div>
           <div style={{ fontSize: 7, color: "#556070", marginTop: 8, textAlign: "center" }}>Generated by Claude — {new Date().toLocaleString()}</div>
         </div>
+      </div>}
+      {/* AI Scenario Generator Modal */}
+      {showScenarioModal && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }} onClick={() => { setShowScenarioModal(false); setScenarioLoading(false); }}>
+        <div style={{ background: "#0c1525ee", border: "1px solid #a855f740", borderRadius: 12, maxWidth: 500, width: "90%", padding: "20px 24px", fontFamily: "inherit" }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "#a855f7" }}><Brain size={14} /> {VI.aiScenario}</div>
+            <button onClick={() => { setShowScenarioModal(false); setScenarioLoading(false); }} style={{ background: "none", border: "none", color: "#7090b0", cursor: "pointer", padding: 4 }}><X size={16} /></button>
+          </div>
+          {scenarioLoading ? <div style={{ textAlign: "center", padding: 30, color: "#a855f7", fontSize: 11 }}>Đang phân tích tình huống...</div> : <>
+            <select value={scenarioType} onChange={e => setScenarioType(e.target.value)} style={{ width: "100%", padding: "8px 10px", marginBottom: 8, borderRadius: 6, border: "1px solid #333", background: "#0a0a0a", color: "#c0d0e0", fontSize: 10, fontFamily: "inherit" }}>
+              {["Lũ lụt", "Sạt lở", "Bão", "Cháy rừng", "Tuần tra biển", "Tùy chỉnh"].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <textarea value={scenarioInput} onChange={e => setScenarioInput(e.target.value)} placeholder="VD: Lũ lụt tại Quảng Bình, 15 điểm dân cư bị cô lập, gió cấp 8..." rows={4} style={{ width: "100%", padding: "8px 10px", marginBottom: 12, borderRadius: 6, border: "1px solid #333", background: "#0a0a0a", color: "#c0d0e0", fontSize: 10, fontFamily: "inherit", resize: "vertical" }} />
+            <button onClick={generateScenario} disabled={!scenarioInput.trim()} style={{ width: "100%", padding: "10px 0", borderRadius: 6, border: "1px solid #a855f740", background: "#a855f720", color: "#a855f7", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}>AI PHÂN TÍCH VÀ TẠO KỊCH BẢN</button>
+          </>}
+        </div>
+      </div>}
+      {/* AI Advice Toast */}
+      {aiAdvice && aiAdvice !== "loading" && <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: "#0c1525ee", border: "1px solid #a855f740", borderRadius: 8, padding: "10px 16px", maxWidth: 400, zIndex: 100, fontFamily: "inherit" }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#a855f7", marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>🎖️ {VI.aiAdvisor}</div>
+        {aiAdvice.map((a, i) => <div key={i} style={{ fontSize: 9, color: "#c0d0e0", marginBottom: 3 }}>{i + 1}. {a}</div>)}
       </div>}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#222;border-radius:3px}button:hover{filter:brightness(1.15)}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
     </div>
