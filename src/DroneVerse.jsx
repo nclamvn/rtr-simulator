@@ -8,6 +8,7 @@ import {
   Brain, GitBranch, Sun, Moon, HeartPulse, ShieldPlus, Anchor,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from "recharts";
+import MapView from "./MapView.jsx";
 
 const PI2 = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -928,6 +929,7 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, 
 const MISSIONS = [
   // ── RESCUE PRESET MISSIONS (Demo Bộ Quốc Phòng) ──
   { id: "flood_qb", name: "Lũ lụt Quảng Bình", domain: "RESCUE", icon: HeartPulse, multi: true,
+    center: [106.60, 17.47], zoom: 12,
     desc: "4 giai đoạn: trinh sát → xác định nạn nhân → cứu hộ → rút lui",
     drones: Array.from({ length: 6 }, (_, i) => ({ id: `TS-${i+1}`, type: "HERA-S", x: -20+i*8, y: -20, alt: 150, hdg: 45 })),
     waypoints: [{ x: 200, y: 150, alt: 150 }, { x: -150, y: 200, alt: 140 }, { x: 250, y: -100, alt: 160 }, { x: -200, y: -150, alt: 130 }, { x: 100, y: 250, alt: 150 }, { x: -100, y: 100, alt: 140 }],
@@ -960,6 +962,7 @@ const MISSIONS = [
     ],
   },
   { id: "landslide_qn", name: "Sạt lở Quảng Nam", domain: "RESCUE", icon: ShieldPlus, multi: true,
+    center: [107.88, 15.52], zoom: 13,
     desc: "3 giai đoạn: đánh giá → tìm kiếm → vận chuyển y tế",
     drones: Array.from({ length: 4 }, (_, i) => ({ id: `SL-S${i+1}`, type: "HERA-S", x: -10+i*8, y: -15, alt: 140, hdg: 30 })),
     waypoints: [{ x: 150, y: 180, alt: 120 }, { x: 200, y: 220, alt: 130 }, { x: 100, y: 250, alt: 120 }],
@@ -985,6 +988,7 @@ const MISSIONS = [
     ],
   },
   { id: "patrol_ts", name: "Tuần tra Trường Sa", domain: "MIL", icon: Anchor, multi: true,
+    center: [114.35, 10.38], zoom: 9,
     desc: "3 giai đoạn: trinh sát biển → phát hiện tàu lạ → báo cáo RTB",
     drones: [
       ...Array.from({ length: 6 }, (_, i) => ({ id: `TT-S${i+1}`, type: "HERA-S", x: -30+i*12, y: -20, alt: 200, hdg: 0 })),
@@ -1257,7 +1261,9 @@ export default function DroneVerse() {
   const startDemo = useCallback(() => {
     const m = MISSIONS[0]; // Lũ lụt Quảng Bình
     launch(m);
-    setTimeout(() => { setCamMode("cinematic"); setWindDir(90); setWindSpd(15);
+    setTimeout(() => {
+      setVw(m.center ? "map" : "split");
+      setCamMode("cinematic"); setWindDir(90); setWindSpd(15);
       const wx = Math.sin(90 * DEG) * 15, wy = Math.cos(90 * DEG) * 15;
       for (const d of swRef.current.drones) { d.fd.windX = wx; d.fd.windY = wy; }
     }, 200);
@@ -1635,7 +1641,7 @@ Format as plain text, no markdown.`;
           {/* Theme toggle */}
           <button onClick={() => setTheme(t => t === "dark" ? "light" : "dark")} style={{ display: "flex", alignItems: "center", padding: "4px 8px", borderRadius: 4, border: `1px solid ${T.border}`, background: T.bgCard, color: T.textMuted, cursor: "pointer", fontFamily: "inherit" }}>{theme === "dark" ? <Sun size={13} /> : <Moon size={13} />}</button>
           <div style={{ display: "flex", gap: 2, background: T.bgCard, borderRadius: 4, padding: 2 }}>
-            {[["split", Layers], ["radar", Radar], ["3d", Box]].map(([v, I]) => (
+            {[["map", MapPin], ["split", Layers], ["radar", Radar], ["3d", Box]].map(([v, I]) => (
               <button key={v} onClick={() => setVw(v)} style={{ display: "flex", alignItems: "center", padding: "4px 10px", borderRadius: 3, border: "none", cursor: "pointer", background: vw === v ? T.accentBg : "transparent", color: vw === v ? T.accent : T.textMuted, fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}><I size={13} /></button>
             ))}
           </div>
@@ -1733,6 +1739,10 @@ Format as plain text, no markdown.`;
             })}
           </div>}
           <div style={{ flex: 1, display: "flex", gap: 1, padding: 1, background: T.bgCard }}>
+            {vw === "map" && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+              <MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} T={T} />
+              <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.accent, zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ TÁC CHIẾN</div>
+            </div>}
             {(vw === "split" || vw === "3d") && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
               <Viewport3D drones={dr} threats={th} waypoints={wp} selectedId={sel} camMode={camMode} windSpd={windSpd} threeTheme={T.three} />
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.textMuted }}><Box size={12} /> 3D TACTICAL</div>
