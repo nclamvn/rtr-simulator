@@ -1724,7 +1724,7 @@ Format as plain text, no markdown.`;
         </div>
         {/* CENTER */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          {phaseInfo && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 10, background: T.bgOverlay, border: `1px solid ${T.purple}40`, borderRadius: 8, padding: "10px 16px", maxWidth: 340, minWidth: 220, fontFamily: "inherit" }}>
+          {phaseInfo && <div style={{ position: "absolute", top: 44, left: 12, zIndex: 10, background: T.bgOverlay, border: `1px solid ${T.purple}40`, borderRadius: 8, padding: "10px 16px", maxWidth: 320, minWidth: 200, fontFamily: "inherit" }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: T.purple, marginBottom: 4 }}>{VI.phase} {phaseInfo.idx + 1}/{phaseInfo.total}: {phaseInfo.name}</div>
             <div style={{ fontSize: 8, color: "#7090b0", marginBottom: 6, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span>{phaseInfo.briefing}</span>
