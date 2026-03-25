@@ -5,7 +5,7 @@ import {
   Cpu, Gauge, Activity, Layers, Clock, Users, Box, ArrowUpRight,
   BarChart3, Compass, Maximize2, Eye, MapPin, FileText, Plus, Copy, X,
   Wind, UserPlus, Home, Shuffle, CircleDot, Film, Volume2, CheckCircle, Circle,
-  Brain, GitBranch, Sparkles, Sun, Moon,
+  Brain, GitBranch, Sun, Moon, HeartPulse, ShieldPlus, Anchor,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from "recharts";
 
@@ -915,7 +915,7 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, 
 // ═══════════════════════════════════════════
 const MISSIONS = [
   // ── RESCUE PRESET MISSIONS (Demo Bộ Quốc Phòng) ──
-  { id: "flood_qb", name: "Lũ lụt Quảng Bình", domain: "RESCUE", icon: Sparkles, multi: true,
+  { id: "flood_qb", name: "Lũ lụt Quảng Bình", domain: "RESCUE", icon: HeartPulse, multi: true,
     desc: "4 giai đoạn: trinh sát → xác định nạn nhân → cứu hộ → rút lui",
     drones: Array.from({ length: 6 }, (_, i) => ({ id: `TS-${i+1}`, type: "HERA-S", x: -20+i*8, y: -20, alt: 150, hdg: 45 })),
     waypoints: [{ x: 200, y: 150, alt: 150 }, { x: -150, y: 200, alt: 140 }, { x: 250, y: -100, alt: 160 }, { x: -200, y: -150, alt: 130 }, { x: 100, y: 250, alt: 150 }, { x: -100, y: 100, alt: 140 }],
@@ -947,7 +947,7 @@ const MISSIONS = [
         transition: (_,__,___,os) => os["rtb_safe"] },
     ],
   },
-  { id: "landslide_qn", name: "Sạt lở Quảng Nam", domain: "RESCUE", icon: Sparkles, multi: true,
+  { id: "landslide_qn", name: "Sạt lở Quảng Nam", domain: "RESCUE", icon: ShieldPlus, multi: true,
     desc: "3 giai đoạn: đánh giá → tìm kiếm → vận chuyển y tế",
     drones: Array.from({ length: 4 }, (_, i) => ({ id: `SL-S${i+1}`, type: "HERA-S", x: -10+i*8, y: -15, alt: 140, hdg: 30 })),
     waypoints: [{ x: 150, y: 180, alt: 120 }, { x: 200, y: 220, alt: 130 }, { x: 100, y: 250, alt: 120 }],
@@ -972,7 +972,7 @@ const MISSIONS = [
         transition: (_,__,___,os) => os["medevac"] },
     ],
   },
-  { id: "patrol_ts", name: "Tuần tra Trường Sa", domain: "MIL", icon: Shield, multi: true,
+  { id: "patrol_ts", name: "Tuần tra Trường Sa", domain: "MIL", icon: Anchor, multi: true,
     desc: "3 giai đoạn: trinh sát biển → phát hiện tàu lạ → báo cáo RTB",
     drones: [
       ...Array.from({ length: 6 }, (_, i) => ({ id: `TT-S${i+1}`, type: "HERA-S", x: -30+i*12, y: -20, alt: 200, hdg: 0 })),
