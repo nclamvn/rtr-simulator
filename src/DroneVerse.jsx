@@ -44,7 +44,7 @@ const THEMES = {
   dark: {
     bg: "#000000", bgPanel: "#000000", bgCard: "#0a0a0a", bgOverlay: "#0c1525ee",
     border: "#222", borderAccent: "#333",
-    text: "#e0e8f0", textDim: "#90b0d0", textMuted: "#7090b0", textFaint: T.textFaint,
+    text: "#e0e8f0", textDim: "#90b0d0", textMuted: "#7090b0", textFaint: "#556070",
     accent: "#00e5ff", accentBg: "#00e5ff18", accentBorder: "#00e5ff60",
     danger: "#ff3b5c", dangerBg: "#ff3b5c30",
     success: "#00e878", successBg: "#00e87820",
