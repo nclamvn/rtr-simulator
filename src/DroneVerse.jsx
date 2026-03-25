@@ -538,6 +538,21 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, 
   const exhaustRef = useRef(new Map()); const threatPartRef = useRef(new Map());
   const burstRef = useRef(new Map()); const alertedRef = useRef(new Set());
   const audioRef = useRef({ prop: 0, wind: 0, alert: 0 });
+  const sceneRef = useRef(null); const ttRef = useRef(threeTheme);
+  const themeObjsRef = useRef({}); // scene objects that need theme updates
+  useEffect(() => {
+    ttRef.current = threeTheme;
+    const s = sceneRef.current; const to = themeObjsRef.current;
+    if (s && threeTheme) {
+      s.background.set(threeTheme.clearColor);
+      if (s.fog) s.fog.color.set(threeTheme.clearColor);
+      const isLight = threeTheme.clearColor === 0xd8e0e8;
+      if (to.ambLight) { to.ambLight.color.set(threeTheme.ambient); to.ambLight.intensity = isLight ? 1.2 : 0.5; }
+      if (to.terrain) to.terrain.material.color.set(threeTheme.terrain);
+      if (to.groundGlow) to.groundGlow.material.color.set(threeTheme.ground);
+      if (to.starMat) to.starMat.opacity = threeTheme.clearColor === 0x070e1a ? 0.45 : 0.05;
+    }
+  }, [threeTheme]);
   useEffect(() => { dRef.current = drones; }, [drones]);
   useEffect(() => { tRef.current = threats; }, [threats]);
   useEffect(() => { wRef.current = waypoints; }, [waypoints]);
@@ -549,17 +564,20 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, 
     const m = mountRef.current; if (!m) return;
     const T = window.THREE; if (!T) return;
     const w = m.clientWidth, h = m.clientHeight;
+    const tt = ttRef.current || THEMES.dark.three;
     const scene = new T.Scene();
-    scene.fog = new T.FogExp2(0x070e1a, 0.0004);
-    scene.background = new T.Color(0x070e1a);
+    scene.fog = new T.FogExp2(tt.clearColor, 0.0004);
+    scene.background = new T.Color(tt.clearColor);
+    sceneRef.current = scene;
     const cam = new T.PerspectiveCamera(55, w / h, 1, 5000); cam.position.set(0, 500, 350);
     const ren = new T.WebGLRenderer({ antialias: true, alpha: true });
     ren.setSize(w, h); ren.setPixelRatio(Math.min(devicePixelRatio, 2));
     ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 1.2;
     m.appendChild(ren.domElement);
 
-    // SPEC-A Fallback: enhanced lighting
-    scene.add(new T.AmbientLight(0x3050a0, 0.5));
+    // Enhanced lighting
+    const ambLight = new T.AmbientLight(tt.ambient, 0.5);
+    scene.add(ambLight); themeObjsRef.current.ambLight = ambLight;
     scene.add(new T.HemisphereLight(0x0a1a3a, 0x000000, 0.4));
     const dl = new T.DirectionalLight(0xaaddff, 0.8); dl.position.set(300, 500, 200); scene.add(dl);
     const cpl = new T.PointLight(0x00ffcc, 0.6, 1400); scene.add(cpl);
@@ -579,19 +597,24 @@ function Viewport3D({ drones, threats, waypoints, selectedId, camMode, windSpd, 
     }
     starGeo.setAttribute("position", new T.BufferAttribute(starPos, 3));
     starGeo.setAttribute("size", new T.BufferAttribute(starSz, 1));
-    scene.add(new T.Points(starGeo, new T.PointsMaterial({ color: 0xffffff, transparent: true, opacity: 0.45, size: 1.5, sizeAttenuation: true })));
+    const starMat = new T.PointsMaterial({ color: 0xffffff, transparent: true, opacity: 0.45, size: 1.5, sizeAttenuation: true });
+    scene.add(new T.Points(starGeo, starMat)); themeObjsRef.current.starMat = starMat;
 
     // SPEC-F: Ground glow plane
-    const gndGlow = new T.Mesh(new T.PlaneGeometry(2000, 2000), new T.MeshBasicMaterial({ color: 0x041210, transparent: true, opacity: 0.3 }));
+    const gndGlow = new T.Mesh(new T.PlaneGeometry(2000, 2000), new T.MeshBasicMaterial({ color: tt.ground, transparent: true, opacity: 0.3 }));
     gndGlow.rotation.x = -Math.PI / 2; gndGlow.position.y = -1; scene.add(gndGlow);
+    themeObjsRef.current.groundGlow = gndGlow;
 
     // Grid + terrain
-    scene.add(new T.GridHelper(1600, 40, 0x1a5050, 0x0a2a2a));
+    const grid = new T.GridHelper(1600, 40, tt.grid1, tt.grid2);
+    scene.add(grid); themeObjsRef.current.grid = grid;
     const tg = new T.PlaneGeometry(1600, 1600, 80, 80); tg.rotateX(-Math.PI / 2);
     const vt = tg.attributes.position;
     for (let i = 0; i < vt.count; i++) { const px = vt.getX(i), pz = vt.getZ(i); vt.setY(i, Math.sin(px * 0.005) * Math.cos(pz * 0.004) * 18 + Math.sin(px * 0.012 + pz * 0.008) * 10); }
     tg.computeVertexNormals();
-    scene.add(new T.Mesh(tg, new T.MeshPhongMaterial({ color: 0x0a2a1a, transparent: true, opacity: 0.6, flatShading: true })));
+    const terrainMat = new T.MeshPhongMaterial({ color: tt.terrain, transparent: true, opacity: 0.6, flatShading: true });
+    const terrainMesh = new T.Mesh(tg, terrainMat);
+    scene.add(terrainMesh); themeObjsRef.current.terrain = terrainMesh;
 
     // Beacon
     const beacon = new T.Mesh(new T.CylinderGeometry(4, 4, 3, 8), new T.MeshPhongMaterial({ color: 0x00ffaa, emissive: 0x00aa66 }));
