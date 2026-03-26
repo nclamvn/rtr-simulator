@@ -13,6 +13,12 @@ dist
 dist-ssr
 *.local
 
+# MiroFish backend (cloned repo — not committed, install separately)
+backend/mirofish/
+__pycache__
+*.pyc
+.venv
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

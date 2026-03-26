@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const MIROFISH_URL = process.env.MIROFISH_URL || 'http://localhost:5001';
 
 // Security headers
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
@@ -97,11 +98,33 @@ app.post('/api/ai', aiLimiter, async (req, res) => {
   res.status(502).json({ error: 'All AI providers unavailable' });
 });
 
-app.get('/health', (req, res) => res.json({
-  status: 'ok',
-  providers: { anthropic: !!ANTHROPIC_KEY, openai: !!OPENAI_KEY },
-  timestamp: Date.now(),
-}));
+// MiroFish Swarm Intelligence proxy
+app.all('/api/sim/*', async (req, res) => {
+  const path = req.path.replace('/api/sim', '');
+  try {
+    const response = await fetch(`${MIROFISH_URL}/api${path}`, {
+      method: req.method,
+      headers: { 'Content-Type': 'application/json' },
+      ...(req.method !== 'GET' && { body: JSON.stringify(req.body) }),
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error('MiroFish proxy error:', err.message);
+    res.status(502).json({ error: 'MiroFish backend unavailable', detail: err.message });
+  }
+});
+
+app.get('/health', async (req, res) => {
+  let mirofishOk = false;
+  try { const r = await fetch(`${MIROFISH_URL}/api/health`); mirofishOk = r.ok; } catch {}
+  res.json({
+    status: 'ok',
+    providers: { anthropic: !!ANTHROPIC_KEY, openai: !!OPENAI_KEY, mirofish: mirofishOk },
+    mirofish_url: MIROFISH_URL,
+    timestamp: Date.now(),
+  });
+});
 
 app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 

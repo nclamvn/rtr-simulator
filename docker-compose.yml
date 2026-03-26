@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # DroneVerse Node.js frontend + API proxy
+  droneverse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MIROFISH_URL=http://mirofish:5001
+    depends_on:
+      - mirofish
+
+  # MiroFish Python backend — swarm intelligence engine
+  mirofish:
+    build:
+      context: ./backend/mirofish/backend
+      dockerfile: ../Dockerfile
+    ports:
+      - "5001:5001"
+    environment:
+      - LLM_API_KEY=${ANTHROPIC_API_KEY}
+      - LLM_BASE_URL=https://api.anthropic.com/v1
+      - LLM_MODEL_NAME=claude-sonnet-4-20250514
+      - ZEP_API_KEY=${ZEP_API_KEY}
+      - PORT=5001
+    volumes:
+      - mirofish-data:/app/data
+
+volumes:
+  mirofish-data:
