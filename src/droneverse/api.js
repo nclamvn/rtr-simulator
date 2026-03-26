@@ -31,14 +31,14 @@ export const mirofish = {
     return res.json();
   },
 
-  // Run predictive simulation
-  async simulate(graphId, config) {
-    const res = await fetch('/api/sim/simulation/start', {
+  // Predictive advisory — agents analyze situation and predict outcomes
+  async predict(missionState, whatIf = "Đánh giá tình huống hiện tại") {
+    const res = await fetch('/api/sim/predict', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ graph_id: graphId, ...config }),
+      body: JSON.stringify({ missionState, whatIf }),
     });
-    if (!res.ok) throw new Error(`MiroFish sim ${res.status}`);
+    if (!res.ok) throw new Error(`MiroFish predict ${res.status}`);
     return res.json();
   },
 

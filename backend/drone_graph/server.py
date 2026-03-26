@@ -6,7 +6,9 @@ Runs on port 5001 — Express proxy forwards /api/sim/* here.
 
 from flask import Flask, request, jsonify
 import os
+import json
 import graph_service
+import predict_service
 
 app = Flask(__name__)
 
@@ -44,6 +46,24 @@ def search_graph():
 def get_nodes(graph_id):
     nodes = graph_service.get_graph_nodes(graph_id)
     return jsonify({"graph_id": graph_id, "nodes": nodes, "count": len(nodes)})
+
+
+@app.route('/api/predict', methods=['POST'])
+def predict():
+    """
+    MiroFish Predictive Advisory — agents analyze situation and predict outcomes.
+    Input: { missionState: {...}, whatIf: "Nếu gió tăng 25m/s?" }
+    Output: { prediction: { agent_opinions: [...], consensus: {...} } }
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    mission_state = data.get("missionState", {})
+    what_if = data.get("whatIf", "Đánh giá tình huống hiện tại")
+
+    result = predict_service.predict(mission_state, what_if)
+    return jsonify(result)
 
 
 if __name__ == '__main__':
