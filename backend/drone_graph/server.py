@@ -9,6 +9,7 @@ import os
 import json
 import graph_service
 import predict_service
+import report_service
 
 app = Flask(__name__)
 
@@ -64,6 +65,34 @@ def predict():
 
     result = predict_service.predict(mission_state, what_if)
     return jsonify(result)
+
+
+@app.route('/api/report/generate', methods=['POST'])
+def generate_report():
+    """
+    ReACT Tactical Report Agent — gathers facts from Zep graph,
+    reasons about them, and writes a structured tactical debrief.
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+
+    graph_id = data.get("graphId") or data.get("graph_id")
+    mission_state = data.get("missionState", {})
+    requirement = data.get("requirement", "Báo cáo chiến thuật tổng hợp sau nhiệm vụ")
+
+    if not graph_id:
+        return jsonify({"error": "graphId required — build graph first"}), 400
+
+    result = report_service.generate_report(graph_id, mission_state, requirement)
+    return jsonify(result)
+
+
+@app.route('/api/report/intelligence/<graph_id>')
+def get_intelligence(graph_id):
+    """Get raw intelligence from Zep graph (facts + entities)."""
+    intel = report_service.gather_graph_intelligence(graph_id, "")
+    return jsonify(intel)
 
 
 if __name__ == '__main__':

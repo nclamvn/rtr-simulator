@@ -42,14 +42,21 @@ export const mirofish = {
     return res.json();
   },
 
-  // Generate ReACT analysis report
-  async generateReport(graphId, requirement) {
+  // ReACT tactical report — gathers Zep facts, reasons, writes debrief
+  async generateReport(graphId, missionState, requirement = "Báo cáo chiến thuật tổng hợp") {
     const res = await fetch('/api/sim/report/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ graph_id: graphId, requirement }),
+      body: JSON.stringify({ graphId, missionState, requirement }),
     });
     if (!res.ok) throw new Error(`MiroFish report ${res.status}`);
+    return res.json();
+  },
+
+  // Get raw intelligence from Zep graph
+  async getIntelligence(graphId) {
+    const res = await fetch(`/api/sim/report/intelligence/${graphId}`);
+    if (!res.ok) throw new Error(`MiroFish intel ${res.status}`);
     return res.json();
   },
 
