@@ -20,6 +20,7 @@ import { MISSIONS } from "./droneverse/missions.js";
 import { ErrorBoundary } from "./droneverse/ErrorBoundary.jsx";
 import RadarPPI from "./droneverse/RadarPPI.jsx";
 import Viewport3D from "./droneverse/Viewport3D.jsx";
+import SimulationView from "./SimulationView.jsx";
 
 
 
@@ -56,6 +57,7 @@ export default function DroneVerse() {
   const [showGraphOverlay, setShowGraphOverlay] = useState(false);
   const [aiDebrief, setAiDebrief] = useState(null);
   const [showAiModal, setShowAiModal] = useState(false);
+  const [showSimView, setShowSimView] = useState(false);
   const [showScenarioModal, setShowScenarioModal] = useState(false);
   const [scenarioInput, setScenarioInput] = useState("");
   const [scenarioType, setScenarioType] = useState("Lũ lụt");
@@ -127,6 +129,7 @@ export default function DroneVerse() {
 
   // Auto-demo: 1-click launch Lũ lụt QB + cinematic + weather
   const startDemo = useCallback(() => {
+    if (run) return; // P1: guard against double-click while running
     const m = MISSIONS[0]; // Cứu hộ Tây Hoà — Kịch bản BQP
     launch(m);
     setTimeout(() => {
@@ -488,6 +491,10 @@ Format as plain text, no markdown.`;
   const fr = dr.filter(d => d.spec.iff === "FRIENDLY").length, ho = dr.filter(d => d.spec.iff === "HOSTILE").length;
   const eliminated = drAll.filter(d => d.status === "ELIMINATED").length;
 
+  if (showSimView) {
+    return <SimulationView theme={theme} onBack={() => setShowSimView(false)} />;
+  }
+
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: T.bg, color: T.text, fontFamily: "'JetBrains Mono','Fira Code',monospace", fontSize: 14, lineHeight: 1.5, overflow: "hidden" }}>
       {/* TOP */}
@@ -498,6 +505,7 @@ Format as plain text, no markdown.`;
             <div style={{ fontSize: 12, color: T.textFaint, marginTop: -1, marginLeft: 24 }}>{VI.subtitle}</div>
           </div>
           <button onClick={startDemo} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 5, border: `1px solid ${T.success}60`, background: T.successBg, color: T.success, cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}><Play size={12} /> {VI.demo}</button>
+          <button onClick={() => setShowSimView(true)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 5, border: `1px solid ${T.accent}60`, background: T.accentBg, color: T.accent, cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}><Navigation size={12} /> GPS-DENIED SIM</button>
           <button onClick={() => setShowScenarioModal(true)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 12px", borderRadius: 5, border: `1px solid ${T.purple}60`, background: T.purpleBg, color: T.purple, cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}><Brain size={12} /> {VI.aiScenario}</button>
           {mis && <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 4, background: mis.domain === "RESCUE" ? T.successBg : mis.domain === "MIL" ? T.dangerBg : T.accentBg, color: mis.domain === "RESCUE" ? T.success : mis.domain === "MIL" ? T.danger : T.accent }}>{mis.domain === "RESCUE" ? VI.rescue : mis.domain} — {mis.name}</span>}
         </div>
