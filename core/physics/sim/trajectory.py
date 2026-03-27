@@ -484,13 +484,14 @@ class TrajectorySimulator:
                 outcome = "lost"
                 break
 
-            # Cone boundary check
+            # Cone boundary check (soft — log but don't terminate)
             if hasattr(self.landmarks, "check_cone_boundary"):
                 try:
                     inside, margin = self.landmarks.check_cone_boundary(true_state.position)
+                    if not inside and "cone_exits" not in locals():
+                        cone_exits = 0
                     if not inside:
-                        outcome = "cone_exit"
-                        break
+                        cone_exits = locals().get("cone_exits", 0) + 1
                 except (ValueError, AttributeError):
                     pass
 
