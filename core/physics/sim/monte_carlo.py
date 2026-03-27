@@ -83,7 +83,17 @@ class MonteCarloHarness:
             )
 
         corridor_end = self.corridor_end
-        drop_alt = 80.0
+        # Compute safe altitude: max terrain + 50m margin
+        try:
+            profile = self.terrain.get_profile(
+                self.corridor_start[:2] if self.corridor_start.size >= 2 else np.zeros(2),
+                corridor_end[:2] if corridor_end.size >= 2 else np.zeros(2),
+                50,
+            )
+            max_elev = float(np.max(profile[:, 2]))
+            drop_alt = max(max_elev + 50.0, 80.0)
+        except Exception:
+            drop_alt = 200.0
         mission = MissionPackage(
             target=np.array([corridor_end[0], corridor_end[1], -drop_alt]),
             landmarks=lm_list,
