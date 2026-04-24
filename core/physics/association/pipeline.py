@@ -7,6 +7,8 @@ Step 4: GEOMETRIC VERIFY — reprojection consistency (simplified RANSAC)
 Step 5: GATED EKF UPDATE — delegated to EKF.update()
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 import numpy as np

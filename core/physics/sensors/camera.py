@@ -3,6 +3,8 @@
 Per đề án 2.6 — camera observation model for landmark-based navigation.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Optional
 

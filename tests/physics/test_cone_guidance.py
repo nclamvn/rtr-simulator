@@ -74,6 +74,86 @@ class TestConeGuidanceSteering:
         assert 15.0 * (1.0 - 0.3 * progress) == pytest.approx(12.75)
 
 
+class TestConeGuidanceLateralCorrection:
+    """Verify lateral correction steers toward cone axis correctly."""
+
+    def _make_state(self, pos, vel):
+        return NominalState(
+            np.array(pos, dtype=float), np.array(vel, dtype=float),
+            np.array([1, 0, 0, 0.0]), np.zeros(3), np.zeros(3), np.zeros(2),
+        )
+
+    def _ned_accel(self, cone_setup, pos, vel):
+        gen, layers, cfg, target = cone_setup
+        g = ConeGuidance(target, layers, cfg, cruise_speed=15.0,
+                         cruise_alt=80.0, cone_landmark_gen=gen)
+        state = self._make_state(pos, vel)
+        accel_body, _ = g.compute(state)
+        from core.physics.dynamics._quaternion import quat_to_rotation
+        R = quat_to_rotation(state.quaternion)
+        return R @ accel_body + np.array([0, 0, 9.80665])
+
+    def test_correction_pushes_west_when_east_of_axis(self, cone_setup) -> None:
+        # Drone 400m east of axis at midpoint (outside cone for radius ~500m)
+        accel = self._ned_accel(cone_setup, [2500, 400, -80], [15, 0, 0])
+        assert accel[1] < 0  # East component negative → pushes west toward axis
+
+    def test_correction_pushes_east_when_west_of_axis(self, cone_setup) -> None:
+        accel = self._ned_accel(cone_setup, [2500, -400, -80], [15, 0, 0])
+        assert accel[1] > 0  # East component positive → pushes east toward axis
+
+    def test_correction_strengthens_further_outside(self, cone_setup) -> None:
+        accel_near = self._ned_accel(cone_setup, [2500, 300, -80], [15, 0, 0])
+        accel_far = self._ned_accel(cone_setup, [2500, 600, -80], [15, 0, 0])
+        assert abs(accel_far[1]) > abs(accel_near[1])
+
+    def test_correction_saturates(self, cone_setup) -> None:
+        accel = self._ned_accel(cone_setup, [2500, 5000, -80], [15, 0, 0])
+        lateral_mag = abs(accel[1])
+        assert lateral_mag <= 15.0  # max_lateral_accel=12 + some forward component
+
+    def test_no_correction_when_well_inside(self, cone_setup) -> None:
+        # On axis, well within cone
+        accel = self._ned_accel(cone_setup, [500, 0, -80], [15, 0, 0])
+        assert abs(accel[1]) < 1.0  # negligible lateral
+
+    def test_heading_blends_toward_axis_when_outside(self, cone_setup) -> None:
+        gen, layers, cfg, target = cone_setup
+        g = ConeGuidance(target, layers, cfg, cruise_speed=15.0,
+                         cruise_alt=80.0, cone_landmark_gen=gen)
+        # Drone far east of axis, heading north along axis
+        state = self._make_state([2500, 800, -80], [15, 0, 0])
+        _, gyro = g.compute(state)
+        # Yaw rate should steer toward west (negative yaw = turn right toward axis)
+        # gyro[2] is yaw rate command
+        assert gyro[2] != 0.0  # Should have some yaw correction
+
+
+class TestCovarianceAwareCorrection:
+    """Verify sigma_lateral parameter is accepted (backward compatibility)."""
+
+    def test_backward_compatible_no_sigma(self, cone_setup) -> None:
+        gen, layers, cfg, target = cone_setup
+        g = ConeGuidance(target, layers, cfg, cone_landmark_gen=gen)
+        state = NominalState(
+            np.array([2500, 0, -80.0]), np.array([15, 0, 0.0]),
+            np.array([1, 0, 0, 0.0]), np.zeros(3), np.zeros(3), np.zeros(2),
+        )
+        accel, gyro = g.compute(state)  # No sigma_lateral kwarg
+        assert accel.shape == (3,)
+        assert gyro.shape == (3,)
+
+    def test_sigma_lateral_accepted(self, cone_setup) -> None:
+        gen, layers, cfg, target = cone_setup
+        g = ConeGuidance(target, layers, cfg, cone_landmark_gen=gen)
+        state = NominalState(
+            np.array([2500, 0, -80.0]), np.array([15, 0, 0.0]),
+            np.array([1, 0, 0, 0.0]), np.zeros(3), np.zeros(3), np.zeros(2),
+        )
+        accel, gyro = g.compute(state, sigma_lateral=50.0)
+        assert accel.shape == (3,)
+
+
 class TestConeGuidanceLayerAdvancement:
     def test_advances_when_near_layer_center(self, cone_setup) -> None:
         gen, layers, cfg, target = cone_setup

@@ -4,6 +4,8 @@ Per đề án Section 2.8 — monitors filter consistency and triggers
 fallback modes (covariance inflation, position reset) when NIS anomalous.
 """
 
+from __future__ import annotations
+
 from collections import deque
 from typing import Optional
 

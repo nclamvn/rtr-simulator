@@ -4,6 +4,8 @@ Zero external dependencies beyond numpy.
 Used for development, testing, and Monte Carlo simulations.
 """
 
+from __future__ import annotations
+
 import numpy as np
 
 from core.physics.terrain._noise import fbm_2d

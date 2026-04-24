@@ -4,6 +4,8 @@ NOT a trusted heading source. Vulnerable to motor EMI.
 Updates rejectable by innovation gating. System works without it.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 import numpy as np

@@ -4,6 +4,8 @@ Generates analysis from single trajectory and Monte Carlo results.
 Uses matplotlib for plots (optional dependency).
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os

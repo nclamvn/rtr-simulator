@@ -163,6 +163,35 @@ class TestConeBoundary:
         assert inside is True  # 15 < 20 (min radius)
 
 
+# ── Correction Direction ─────────────────────────────────────
+
+
+class TestCorrectionDirection:
+    def test_points_toward_axis_from_east(self, flat_terrain, drop, target) -> None:
+        gen = ConeLandmarkGenerator(flat_terrain, ConeConfig(base_radius=1000))
+        gen.generate(drop, target)
+        # Drone is 200m east of axis at midpoint
+        toward, dist = gen.get_correction_direction(np.array([2500, 200, -80]))
+        assert dist == pytest.approx(200.0, abs=1.0)
+        # Should point west (negative east)
+        assert toward[1] < -0.9
+
+    def test_points_toward_axis_from_west(self, flat_terrain, drop, target) -> None:
+        gen = ConeLandmarkGenerator(flat_terrain, ConeConfig(base_radius=1000))
+        gen.generate(drop, target)
+        toward, dist = gen.get_correction_direction(np.array([2500, -300, -80]))
+        assert dist == pytest.approx(300.0, abs=1.0)
+        # Should point east (positive east)
+        assert toward[1] > 0.9
+
+    def test_on_axis_returns_zero(self, flat_terrain, drop, target) -> None:
+        gen = ConeLandmarkGenerator(flat_terrain, ConeConfig(base_radius=1000))
+        gen.generate(drop, target)
+        toward, dist = gen.get_correction_direction(np.array([2500, 0, -80]))
+        assert dist < 1e-3
+        np.testing.assert_allclose(toward, [0, 0], atol=1e-6)
+
+
 # ── Layer Filtering ───────────────────────────────────────────
 
 

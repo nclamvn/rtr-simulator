@@ -350,6 +350,46 @@ export default function SimulationView({ theme = "dark", onBack }) {
   const outcomeColor = data.outcome === "success" ? T.success : data.outcome === "timeout" ? T.warn : T.danger;
   const modeLabel = data.mode === "cone" ? "CONE" : "CORRIDOR";
 
+  // ── Real-time telemetry from current frame ──
+  const truePos = data.true_path[idx] || [0, 0, 0];
+  const estPos = data.est_path[idx] || [0, 0, 0];
+  const sigIdx = data.sigma.length > 0 ? Math.min(Math.floor(idx * data.sigma.length / data.true_path.length), data.sigma.length - 1) : 0;
+  const sigmaRow = data.sigma[sigIdx] || [0, 0, 0, 0];
+  const sigN = sigmaRow[1] || 0, sigE = sigmaRow[2] || 0, sigAlt = sigmaRow[3] || 0;
+
+  // Speed from consecutive positions
+  let trueSpeed = 0;
+  if (idx > 0) {
+    const prev = data.true_path[idx - 1];
+    const dtPath = (data.errors[Math.min(idx, data.errors.length - 1)]?.[0] || 0) - (data.errors[Math.min(idx - 1, data.errors.length - 1)]?.[0] || 0);
+    if (dtPath > 0) {
+      const dn = truePos[0] - prev[0], de = truePos[1] - prev[1];
+      trueSpeed = Math.sqrt(dn * dn + de * de) / dtPath;
+    }
+  }
+
+  // Lateral drift from cone axis (axis runs along North from drop to target)
+  const targetN = data.target[0] || 5000;
+  const axisFrac = targetN > 0 ? truePos[0] / targetN : 0;
+  const lateralDrift = Math.abs(truePos[1]);
+
+  // Cone margin at current position (approximate from layer radii)
+  let coneRadius = 0, coneLayer = 0;
+  if (data.cone && data.cone.layers) {
+    const layers = data.cone.layers;
+    for (let i = 0; i < layers.length; i++) {
+      if (truePos[0] >= (layers[i].distance || 0)) { coneRadius = layers[i].radius; coneLayer = i; }
+    }
+    // Interpolate radius
+    if (coneLayer < layers.length - 1) {
+      const l0 = layers[coneLayer], l1 = layers[coneLayer + 1];
+      const d0 = l0.distance || 0, d1 = l1.distance || 0;
+      if (d1 > d0) { const f = (truePos[0] - d0) / (d1 - d0); coneRadius = l0.radius + f * (l1.radius - l0.radius); }
+    }
+  }
+  const coneMargin = coneRadius - lateralDrift;
+  const altitude = truePos[2] ? Math.abs(truePos[2]) : 0;
+
   const S = {
     panel: { background: T.bgPanel, border: `1px solid ${T.border}`, borderRadius: 6, padding: narrow ? 6 : 10, fontFamily: "monospace", fontSize: 12 },
     label: { color: T.textMuted, fontSize: 10, textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 3 },
@@ -507,6 +547,73 @@ export default function SimulationView({ theme = "dark", onBack }) {
                 <span>{data.cone.progress.current_layer}/{data.cone.progress.total_layers}</span>
               </div>
             )}
+          </div>
+
+          {/* Real-time Telemetry */}
+          <div style={{ ...S.panel, margin: "0 6px", fontSize: 11, lineHeight: 1.6 }}>
+            <div style={{ ...S.label, marginBottom: 4 }}>Telemetry <span style={{ color: T.textFaint, fontSize: 9, fontWeight: 400 }}>t={currentT.toFixed(1)}s</span></div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1px 12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>True N</span>
+                <span style={{ color: COLORS.true }}>{truePos[0].toFixed(0)}m</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>True E</span>
+                <span style={{ color: COLORS.true }}>{truePos[1].toFixed(0)}m</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>Est N</span>
+                <span style={{ color: COLORS.estimated }}>{estPos[0].toFixed(0)}m</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>Est E</span>
+                <span style={{ color: COLORS.estimated }}>{estPos[1].toFixed(0)}m</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>Speed</span>
+                <span>{trueSpeed.toFixed(1)} m/s</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>Alt</span>
+                <span>{altitude.toFixed(0)}m</span>
+              </div>
+              <div style={{ borderTop: `1px solid ${T.border}`, gridColumn: "1/-1", margin: "2px 0" }} />
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>σ_N</span>
+                <span style={{ color: sigN > 50 ? T.danger : sigN > 20 ? T.warn : T.textDim }}>{sigN.toFixed(1)}m</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>σ_E</span>
+                <span style={{ color: sigE > 50 ? T.danger : sigE > 20 ? T.warn : T.textDim }}>{sigE.toFixed(1)}m</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>σ_Alt</span>
+                <span style={{ color: sigAlt > 50 ? T.danger : sigAlt > 20 ? T.warn : T.textDim }}>{sigAlt.toFixed(1)}m</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span style={{ color: T.textDim }}>Lat Drift</span>
+                <span style={{ color: lateralDrift > coneRadius * 0.8 ? T.danger : lateralDrift > coneRadius * 0.5 ? T.warn : T.textDim }}>{lateralDrift.toFixed(0)}m</span>
+              </div>
+              {data.cone && <>
+                <div style={{ borderTop: `1px solid ${T.border}`, gridColumn: "1/-1", margin: "2px 0" }} />
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: T.textDim }}>Cone R</span>
+                  <span style={{ color: COLORS.cone.replace("0.4", "1") }}>{coneRadius.toFixed(0)}m</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: T.textDim }}>Margin</span>
+                  <span style={{ color: coneMargin < 0 ? T.danger : coneMargin < coneRadius * 0.2 ? T.warn : T.success }}>{coneMargin.toFixed(0)}m</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: T.textDim }}>Layer</span>
+                  <span>{coneLayer + 1}/{data.cone.layers.length}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: T.textDim }}>Status</span>
+                  <span style={{ color: coneMargin >= 0 ? T.success : T.danger, fontWeight: 700 }}>{coneMargin >= 0 ? "IN" : "OUT"}</span>
+                </div>
+              </>}
+            </div>
           </div>
 
           {/* Error chart */}

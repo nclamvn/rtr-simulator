@@ -8,6 +8,8 @@ Noise model per đề án 2.2.3 (A-SENSOR):
 - Vibration: additional noise from propeller
 """
 
+from __future__ import annotations
+
 import numpy as np
 
 from core.physics.sensors.base import SensorModel

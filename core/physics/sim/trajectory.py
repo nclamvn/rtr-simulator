@@ -4,6 +4,8 @@ Wires all components: dynamics → sensors → EKF → association → update.
 Guidance uses EKF estimated state (not truth) — realistic closed-loop.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Optional
 
@@ -55,7 +57,7 @@ class SimpleGuidance:
         self.kp_alt = 1.0
 
     def compute(
-        self, estimated_state: NominalState
+        self, estimated_state: NominalState, **kwargs
     ) -> tuple[np.ndarray, np.ndarray]:
         """Compute desired body accel and gyro commands.
 
@@ -145,10 +147,14 @@ class ConeGuidance:
         self.kp_heading = 1.5
         self.kp_speed = 2.0
         self.kp_alt = 1.0
-        self.kp_lateral = 0.8
+        self.kp_lateral = 1.2
+        self.max_lateral_accel = 12.0
+        self.sigma_thresh = 20.0
+        self.sigma_sat = 80.0
+        self.k_cov = 0.15
 
     def compute(
-        self, estimated_state: NominalState
+        self, estimated_state: NominalState, sigma_lateral: float = 0.0
     ) -> tuple[np.ndarray, np.ndarray]:
         """Compute body accel + gyro commands. Navigates through cone layers."""
         pos = estimated_state.position
@@ -174,24 +180,100 @@ class ConeGuidance:
 
         heading_err = (desired_heading - current_heading + np.pi) % (2 * np.pi) - np.pi
 
-        # Lateral correction if near cone boundary
-        lateral_correction = 0.0
+        # ── Layer-transition centering ──
+        # Always pull toward the next layer center, proportional to lateral offset.
+        # This ensures the drone actively corrects position as the cone narrows.
+        progress = self.current_layer_index / max(len(self.layers), 1)
+        lateral_accel_vec = np.zeros(2)
+        heading_blend = 0.0
+        if self.cone_gen is not None:
+            lateral_to_wp = waypoint[:2] - pos[:2]
+            # Decompose into along-axis and cross-axis components
+            try:
+                toward_axis, lat_dist = self.cone_gen.get_correction_direction(pos)
+                if lat_dist > 2.0:
+                    # Get target layer radius to scale the centering gain
+                    target_layer = self.layers[min(self.current_layer_index, len(self.layers) - 1)] if self.layers else None
+                    target_radius = target_layer.radius if target_layer else 500.0
+                    # Centering gain: stronger as cone narrows (radius shrinks)
+                    # At large radius (1000m+): gentle pull. At small radius (<100m): firm pull.
+                    center_gain = self.kp_lateral * 0.5 * (1.0 + 200.0 / max(target_radius, 10.0))
+                    center_accel = center_gain * lat_dist / max(target_radius, 10.0)
+                    # In terminal phase (progress > 75%), allow stronger centering
+                    max_center = self.max_lateral_accel * (0.8 if progress >= 0.75 else 0.5)
+                    center_accel = min(center_accel, max_center)
+                    lateral_accel_vec = center_accel * toward_axis
+            except (ValueError, AttributeError):
+                pass
         if self.cone_gen is not None:
             try:
                 inside, margin = self.cone_gen.check_cone_boundary(pos)
                 current_layer = self.cone_gen.get_current_layer(pos)
-                threshold = current_layer.radius * 0.2
+                # Floor threshold so narrow layers still get early correction
+                threshold = max(current_layer.radius * 0.3, 50.0)
+
                 if margin < threshold:
-                    # Steer toward axis
-                    lateral_correction = self.kp_lateral * (threshold - margin)
+                    toward_axis, lat_dist = self.cone_gen.get_correction_direction(pos)
+
+                    if lat_dist > 1e-6:
+                        deviation = threshold - margin
+                        if margin >= 0:
+                            gain = self.kp_lateral * deviation
+                        else:
+                            gain = self.kp_lateral * (threshold + abs(margin) ** 1.5)
+
+                        gain = min(gain, self.max_lateral_accel)
+                        lateral_accel_vec = gain * toward_axis
+
+                        # Heading blend: when far outside, steer heading toward axis
+                        blend_trigger = max(current_layer.radius * 0.1, 20.0)
+                        blend_range = max(current_layer.radius * 0.4, 80.0)
+                        if margin < -blend_trigger:
+                            heading_blend = min(
+                                1.0,
+                                (-margin - blend_trigger) / blend_range,
+                            )
+            except (ValueError, AttributeError):
+                pass
+
+        # Note: covariance-aware correction was evaluated but found ineffective
+        # here because EKF estimated position stays near axis even when true
+        # position drifts — sigma grows but we don't know WHICH direction to
+        # correct. The remaining drift is a fundamental EKF observability limit.
+
+        # Blend heading toward axis when outside cone or uncertainty is high
+        if heading_blend > 0.0 and self.cone_gen is not None:
+            try:
+                toward_axis, lat_dist = self.cone_gen.get_correction_direction(pos)
+                if lat_dist > 1e-6:
+                    axis_heading = np.arctan2(toward_axis[1], toward_axis[0])
+                    axis_heading_err = (axis_heading - current_heading + np.pi) % (2 * np.pi) - np.pi
+                    heading_err = (1.0 - heading_blend) * heading_err + heading_blend * axis_heading_err
             except (ValueError, AttributeError):
                 pass
 
         yaw_rate_cmd = self.kp_heading * heading_err
 
-        # Speed modulation: slow down near target
-        progress = self.current_layer_index / max(len(self.layers), 1)
-        target_speed = self.cruise_speed * (1.0 - 0.3 * progress)
+        # ── Terminal guidance mode ──
+        # Last 25% of layers: slow down proportional to how narrow the cone is,
+        # but only when well-centered. If drifting, maintain speed to reach
+        # landmarks faster and get EKF updates.
+        terminal_phase = progress >= 0.75
+
+        if terminal_phase:
+            cur = self.layers[min(self.current_layer_index, len(self.layers) - 1)] if self.layers else None
+            cur_radius = cur.radius if cur else 100.0
+            dist_to_target = np.linalg.norm(self.target[:2] - pos[:2])
+            # Terminal speed: slower as we get closer to target
+            terminal_speed = max(3.0, min(
+                self.cruise_speed * 0.7,
+                self.cruise_speed * cur_radius / 400.0,
+                dist_to_target * 0.015,  # 1.5% of distance
+            ))
+            target_speed = terminal_speed
+        else:
+            target_speed = self.cruise_speed * (1.0 - 0.3 * progress)
+
         drag_ff = self.drag_coeffs[0] * target_speed
         speed_err = target_speed - speed
         forward_accel = drag_ff + self.kp_speed * speed_err
@@ -203,12 +285,19 @@ class ConeGuidance:
 
         # Build NED accel
         heading_vec = vel[:2] / speed if speed > 0.5 else np.array([np.cos(desired_heading), np.sin(desired_heading)])
-        # Add lateral correction perpendicular to heading, toward axis
-        perp_vec = np.array([-heading_vec[1], heading_vec[0]])
+
+        # Wind feedforward: compensate estimated crosswind to reduce drift
+        wind_ff = np.zeros(2)
+        if hasattr(estimated_state, 'wind') and estimated_state.wind is not None:
+            wind_est = estimated_state.wind[:2]
+            # Crosswind component (perpendicular to heading)
+            cross = np.array([-heading_vec[1], heading_vec[0]])
+            crosswind = np.dot(wind_est, cross)
+            wind_ff = -self.drag_coeffs[0] * crosswind * cross
 
         accel_ned = np.array([
-            forward_accel * heading_vec[0] - lateral_correction * perp_vec[0],
-            forward_accel * heading_vec[1] - lateral_correction * perp_vec[1],
+            forward_accel * heading_vec[0] + lateral_accel_vec[0] + wind_ff[0],
+            forward_accel * heading_vec[1] + lateral_accel_vec[1] + wind_ff[1],
             -vertical_accel,
         ])
 
@@ -218,10 +307,23 @@ class ConeGuidance:
         return accel_body, gyro_body
 
     def _advance_layer(self, position: np.ndarray) -> None:
-        """Advance to next layer if drone has passed current layer center."""
+        """Advance to next layer when drone is along-axis past the layer
+        AND laterally within the layer radius."""
         if self.current_layer_index >= len(self.layers):
             return
         layer = self.layers[self.current_layer_index]
+        # Check along-axis progress (must have passed the layer distance)
+        if self.cone_gen is not None:
+            try:
+                d = self.cone_gen._project_distance(position)
+                _, lat_dist = self.cone_gen.get_correction_direction(position)
+                # Advance only if past this layer AND laterally within radius
+                if d >= layer.distance_from_base and lat_dist < layer.radius * 0.8:
+                    self.current_layer_index += 1
+                return
+            except (ValueError, AttributeError):
+                pass
+        # Fallback: original distance check
         dist = np.linalg.norm(position[:2] - layer.center[:2])
         if dist < layer.radius * 0.5:
             self.current_layer_index += 1
@@ -329,9 +431,12 @@ class TrajectorySimulator:
         for step in range(max_steps):
             t = step * dt
 
-            # Guidance (from estimated state)
+            # Guidance (from estimated state + lateral uncertainty)
             est_state = self.estimator.get_state()
-            accel_body_cmd, gyro_body_cmd = guidance.compute(est_state)
+            sigma_lateral = float(np.sqrt(self.estimator.P[1, 1]))
+            accel_body_cmd, gyro_body_cmd = guidance.compute(
+                est_state, sigma_lateral=sigma_lateral
+            )
 
             # True wind at current position
             wind_true = self.wind.get_wind(true_state.position, t)

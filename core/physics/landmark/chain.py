@@ -4,6 +4,8 @@ Per đề án Section 2.4 — Hera at 500m scans corridor, AI selects landmarks.
 This module replicates that process via procedural generation.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Optional
 

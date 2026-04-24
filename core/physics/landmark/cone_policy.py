@@ -5,6 +5,8 @@ r(d) = kσ·σ⊥(d) + kₒ·O(d)⁻¹ + kc·C(d) + km·M(d)
 With trumpet extension (Eq. 4) at base for drop uncertainty.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import numpy as np

@@ -5,6 +5,8 @@ Each layer is a cross-section with its own set of landmarks.
 Density increases toward target — more landmarks where precision matters.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Optional
 
@@ -338,3 +340,22 @@ class ConeLandmarkGenerator(LandmarkProvider):
         proj = along * self._axis_dir_2d
         lateral_vec = delta - proj
         return float(np.linalg.norm(lateral_vec))
+
+    def get_correction_direction(
+        self, position: np.ndarray
+    ) -> tuple[np.ndarray, float]:
+        """Return (unit_vec_toward_axis [2], lateral_distance).
+
+        unit_vec_toward_axis points from position toward the nearest point on
+        the cone axis.  If position is exactly on the axis, returns a zero
+        vector and distance 0.
+        """
+        delta = position[:2] - self._axis_origin[:2]
+        along = np.dot(delta, self._axis_dir_2d)
+        proj = along * self._axis_dir_2d
+        lateral_vec = delta - proj  # axis → drone
+        lat_dist = float(np.linalg.norm(lateral_vec))
+        if lat_dist < 1e-6:
+            return np.zeros(2), 0.0
+        toward_axis = -lateral_vec / lat_dist
+        return toward_axis, lat_dist

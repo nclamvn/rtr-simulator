@@ -4,6 +4,8 @@ Wind = mean_wind (with altitude shear) + Dryden turbulence (filtered white noise
 Optional terrain coupling: rougher terrain → more turbulence.
 """
 
+from __future__ import annotations
+
 from typing import Optional
 
 import numpy as np

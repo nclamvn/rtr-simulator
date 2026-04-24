@@ -58,6 +58,7 @@ def run_sim(duration: float = 30.0, corridor_km: float = 5.0, seed: int = 42, us
         from core.physics.types import ConeConfig
         cone_cfg = ConeConfig(num_layers=8, base_radius=1200,
                               landmarks_per_layer_base=3, landmarks_per_layer_final=10,
+                              min_layer_radius=50.0,
                               max_recognition_range=600.0)
         lm_gen = ConeLandmarkGenerator(terrain, cone_cfg)
         lm_list, clusters, cone_layers = lm_gen.generate(

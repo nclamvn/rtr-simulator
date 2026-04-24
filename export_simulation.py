@@ -20,6 +20,8 @@ Usage:
   python export_simulation.py --output exports/experiment_1
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import json

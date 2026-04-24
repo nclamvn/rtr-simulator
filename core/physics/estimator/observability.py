@@ -4,6 +4,8 @@ Tracks covariance growth rate of bias/disturbance states.
 Triggers maneuver when observability drops and exit risk rises.
 """
 
+from __future__ import annotations
+
 from collections import deque
 from dataclasses import dataclass
 from typing import Optional
