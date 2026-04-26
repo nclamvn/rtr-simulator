@@ -457,3 +457,33 @@ class ConeConfig:
     max_recognition_range: float = 500.0   # meters
     descriptor_dim: int = 256              # ORB descriptor bits
     p_individual_detect: float = 0.7
+
+
+@dataclass
+class PNConfig:
+    """Proportional Navigation terminal guidance configuration.
+
+    PN law: heading_rate = N * bearing_rate
+    Optimal for stationary target with bearing-only measurement.
+    """
+
+    # Switch criteria
+    switch_distance: float = 500.0              # meters — PN activates below this
+    max_off_boresight: float = 45.0 * DEG2RAD   # target must be within +/-45 deg FOV
+    min_speed: float = 3.0                      # m/s — don't switch if stalled
+
+    # PN law
+    nav_constant: float = 3.0                   # N — pure PN optimal
+    bearing_noise_rad: float = 0.5 * DEG2RAD    # camera bearing noise
+    rate_filter_alpha: float = 0.3              # low-pass on bearing rate
+
+    # Limits
+    max_turn_rate: float = 30.0 * DEG2RAD       # rad/s max yaw rate
+    max_bank: float = 30.0 * DEG2RAD            # rad max bank
+
+    # Terminal dive
+    terminal_dive_distance: float = 50.0        # meters — begin descent
+    descent_rate: float = 2.0                   # m/s downward
+
+    # Speed
+    cruise_speed: float = 12.0                  # m/s maintain during PN

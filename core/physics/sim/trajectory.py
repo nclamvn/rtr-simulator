@@ -32,6 +32,8 @@ from core.physics.types import (
 )
 from core.physics.wind.base import WindField
 
+from core.physics.sim.pn_guidance import ProportionalNavGuidance
+
 logger = logging.getLogger(__name__)
 
 
@@ -371,6 +373,7 @@ class TrajectorySimulator:
         self.landmarks = landmarks
         self.config = config
         self._risk_policy = None  # Set externally for adaptive cone widening
+        self._pn_config = None    # Set externally for PN terminal guidance
 
     def run(self, mission: MissionPackage, drone: DroneConfig) -> SimResult:
         """Run a single trajectory from drop point B to target T."""
@@ -412,6 +415,10 @@ class TrajectorySimulator:
             wind=mission.wind_estimate.copy(),
         )
 
+        # PN terminal guidance (optional — only if pn_config set)
+        pn = ProportionalNavGuidance(self._pn_config) if self._pn_config else None
+        pn_active = False
+
         # Recording
         true_states: list[NominalState] = []
         estimated_states: list[NominalState] = []
@@ -435,9 +442,24 @@ class TrajectorySimulator:
             # Guidance (from estimated state + lateral uncertainty)
             est_state = self.estimator.get_state()
             sigma_lateral = float(np.sqrt(self.estimator.P[1, 1]))
-            accel_body_cmd, gyro_body_cmd = guidance.compute(
-                est_state, sigma_lateral=sigma_lateral
-            )
+
+            # PN switch check
+            if pn is not None and not pn_active:
+                if pn.should_switch(est_state, mission.target):
+                    pn.activate(est_state, mission.target, t)
+                    pn_active = True
+                    logger.info("PN activated at t=%.1f d=%.0f",
+                                t, pn.switch_distance)
+
+            if pn_active:
+                # PN uses true_state for bearing (camera direct measurement)
+                accel_body_cmd, gyro_body_cmd = pn.compute(
+                    est_state, mission.target, true_state, t
+                )
+            else:
+                accel_body_cmd, gyro_body_cmd = guidance.compute(
+                    est_state, sigma_lateral=sigma_lateral
+                )
 
             # True wind at current position
             wind_true = self.wind.get_wind(true_state.position, t)
@@ -666,6 +688,7 @@ class TrajectorySimulator:
                 else 0.0,
                 **({"cone_progress": guidance.get_layer_progress()}
                    if hasattr(guidance, "get_layer_progress") else {}),
+                **(pn.get_report() if pn and pn.active else {}),
             },
         )
 

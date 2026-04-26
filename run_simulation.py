@@ -101,10 +101,12 @@ def run_sim(duration: float = 30.0, corridor_km: float = 5.0, seed: int = 42, us
         associator, terrain, wind, lm_gen, cfg,
     )
 
-    # Adaptive cone widening: attach risk policy
+    # Adaptive cone widening + PN terminal guidance
     if use_cone:
         from core.physics.landmark.cone_policy import RiskShapedCone
+        from core.physics.types import PNConfig
         sim._risk_policy = RiskShapedCone()
+        sim._pn_config = PNConfig()
 
     print(f"Running {duration}s simulation, {corridor_km}km corridor, seed={seed}...")
     t0 = time.time()
