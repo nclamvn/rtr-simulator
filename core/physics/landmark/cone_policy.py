@@ -32,6 +32,10 @@ class ConeRiskConfig:
     # P_exit target
     p_exit_max: float = 0.01
 
+    # Adaptive widening (runtime EKF uncertainty)
+    k_adapt: float = 3.0              # multiplier on EKF σ_lateral
+    adapt_max_radius: float = 500.0   # cap: never wider than 500m
+
 
 class RiskShapedCone:
     """Compute admissible cone radius from risk factors."""
@@ -45,6 +49,7 @@ class RiskShapedCone:
         sigma_lateral: float,
         landmark_density: float,
         terrain_clutter: float,
+        ekf_sigma_lateral: float | None = None,
     ) -> float:
         """Admissible radius at distance d from target.
 
@@ -53,6 +58,9 @@ class RiskShapedCone:
             sigma_lateral: predicted lateral uncertainty (m)
             landmark_density: landmarks per km² at this distance
             terrain_clutter: occlusion/clutter score 0-1
+            ekf_sigma_lateral: runtime EKF lateral uncertainty (m).
+                If provided, radius is widened to at least
+                k_adapt * ekf_sigma_lateral (adaptive floor).
         """
         c = self.config
 
@@ -71,6 +79,12 @@ class RiskShapedCone:
                 -c.trumpet_lambda * (c.corridor_length - d_from_base)
             )
             r += r_trumpet
+
+        # Adaptive floor from runtime EKF uncertainty
+        if ekf_sigma_lateral is not None and ekf_sigma_lateral > 0:
+            r_adaptive = c.k_adapt * ekf_sigma_lateral
+            r = max(r, r_adaptive)
+            r = min(r, c.adapt_max_radius)
 
         return float(r)
 

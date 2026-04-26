@@ -121,6 +121,15 @@ function transformSimData(raw, idx) {
   }
   const coneMargin = coneRadius - lateralDrift;
 
+  // Adaptive cone widening: r_adapt = max(r_geo, 3 * σ_lateral)
+  const sigmaLat = Math.sqrt(sigRow[1] ** 2 + sigRow[2] ** 2);
+  const K_ADAPT = 3.0;
+  const ADAPT_MAX = 500;
+  const rAdaptive = Math.min(Math.max(coneRadius, K_ADAPT * sigmaLat), ADAPT_MAX);
+  const adapted = rAdaptive > coneRadius;
+  const adaptiveMargin = rAdaptive - lateralDrift;
+  const adaptiveStatus = adaptiveMargin >= 0 ? "IN" : "OUT";
+
   // Mode heuristic from sigma growth
   let mode = "NOMINAL";
   if (sigRow[1] > 60) mode = "INERTIAL";
@@ -154,8 +163,12 @@ function transformSimData(raw, idx) {
     sigma: { n: sigRow[1], e: sigRow[2], alt: sigRow[3] || 0 },
     lat_drift: lateralDrift,
     cone_r: coneRadius,
-    margin: coneMargin,
-    status: coneMargin >= 0 ? "IN" : "OUT",
+    cone_r_adapt: rAdaptive,
+    adapted,
+    margin: adaptiveMargin,
+    margin_geo: coneMargin,
+    status: adaptiveStatus,
+    sigma_lat: sigmaLat,
     outcome: raw.outcome?.toUpperCase() || "UNKNOWN",
     error: errRow[1],
     to_target: Math.sqrt((targetN - truePos[0]) ** 2 + truePos[1] ** 2),
@@ -927,9 +940,17 @@ export default function Module18TacticalUI({ onBack, theme = "dark" }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px", marginTop: 4 }}>
             <div>
               <SectionHeader>Cone Constraint</SectionHeader>
-              <DataRow label="Radius" value={data.cone_r.toFixed(0)} unit="m" color={T.info} />
+              <DataRow label="GEO R" value={data.cone_r.toFixed(0)} unit="m" color={T.info} />
+              {data.adapted && (
+                <DataRow label="ADAPT R" value={data.cone_r_adapt.toFixed(0)} unit="m" color={T.accent} />
+              )}
               <DataRow label="Margin" value={data.margin.toFixed(0)} unit="m"
                 color={data.margin < 0 ? T.danger : T.accent} />
+              {data.adapted && (
+                <div style={{ fontSize: 8, color: T.accent, fontFamily: FONT, marginTop: 2, letterSpacing: 1 }}>
+                  ADAPTED ({data.sigma_lat.toFixed(0)}m SIG)
+                </div>
+              )}
             </div>
             <div>
               <SectionHeader>Environment</SectionHeader>

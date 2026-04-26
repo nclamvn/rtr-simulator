@@ -370,6 +370,7 @@ class TrajectorySimulator:
         self.wind = wind
         self.landmarks = landmarks
         self.config = config
+        self._risk_policy = None  # Set externally for adaptive cone widening
 
     def run(self, mission: MissionPackage, drone: DroneConfig) -> SimResult:
         """Run a single trajectory from drop point B to target T."""
@@ -589,10 +590,31 @@ class TrajectorySimulator:
                 outcome = "lost"
                 break
 
-            # Cone boundary check (soft — log but don't terminate)
+            # Cone boundary check with adaptive widening
             if hasattr(self.landmarks, "check_cone_boundary"):
                 try:
                     inside, margin = self.landmarks.check_cone_boundary(true_state.position)
+                    # Adaptive: if geometric says OUT but EKF uncertainty is high,
+                    # widen cone to k_adapt * σ_lateral before declaring OUT.
+                    if not inside:
+                        sigma_n = float(np.sqrt(self.estimator.P[0, 0]))
+                        sigma_e = float(np.sqrt(self.estimator.P[1, 1]))
+                        sigma_lat = float(np.sqrt(sigma_n**2 + sigma_e**2))
+                        # Re-check with adaptive radius
+                        from core.physics.landmark.cone_policy import RiskShapedCone
+                        if hasattr(self, "_risk_policy"):
+                            r_adapt = self._risk_policy.compute_radius(
+                                d=float(np.linalg.norm(true_state.position[:2] - mission.target[:2])),
+                                sigma_lateral=sigma_lat,
+                                landmark_density=5.0,
+                                terrain_clutter=0.2,
+                                ekf_sigma_lateral=sigma_lat,
+                            )
+                            _, lat_dist = self.landmarks.get_correction_direction(true_state.position)
+                            adaptive_margin = r_adapt - abs(lat_dist)
+                            if adaptive_margin >= 0:
+                                inside = True
+                                margin = adaptive_margin
                     if not inside and "cone_exits" not in locals():
                         cone_exits = 0
                     if not inside:
