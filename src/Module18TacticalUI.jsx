@@ -683,6 +683,10 @@ export default function Module18TacticalUI({ onBack }) {
     return () => obs.disconnect();
   }, []);
 
+  // ALL hooks BEFORE any conditional return (React hook order rule)
+  const data = useMemo(() => raw ? transformSimData(raw, playIdx) : null, [raw, playIdx]);
+  const chartW = 280;
+
   // Loading state
   if (loading) return (
     <div style={{ background: T.bg, color: T.text, width: "100%", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT }}>
@@ -690,17 +694,13 @@ export default function Module18TacticalUI({ onBack }) {
     </div>
   );
 
-  if (error) return (
+  if (error || !data) return (
     <div style={{ background: T.bg, color: T.text, width: "100%", height: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: FONT, gap: 16 }}>
       <span style={{ color: T.danger, fontSize: 14 }}>NO SIMULATION DATA</span>
       <span style={{ color: T.textDim, fontSize: 12 }}>Run: python run_simulation.py --cone</span>
       {onBack && <button onClick={onBack} style={{ marginTop: 12, background: T.accentDim, border: `1px solid ${T.accent}40`, color: T.accent, padding: "8px 20px", borderRadius: 4, cursor: "pointer", fontFamily: FONT, fontSize: 12 }}>BACK</button>}
     </div>
   );
-
-  // Transform raw data at current playback frame
-  const data = useMemo(() => transformSimData(raw, playIdx), [raw, playIdx]);
-  const chartW = 280;
 
   return (
     <div style={{
