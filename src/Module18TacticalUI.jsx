@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 // ═══════════════════════════════════════════════════════════
 // RTR MODULE 18 — GPS-DENIED NAV — TACTICAL C2 INTERFACE
@@ -699,7 +699,7 @@ export default function Module18TacticalUI({ onBack }) {
   );
 
   // Transform raw data at current playback frame
-  const data = transformSimData(raw, playIdx);
+  const data = useMemo(() => transformSimData(raw, playIdx), [raw, playIdx]);
   const chartW = 280;
 
   return (

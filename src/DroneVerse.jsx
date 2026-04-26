@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, memo, lazy, Suspense } from "react";
 import {
   Radar, Radio, Battery, Signal, Navigation, Target, AlertTriangle,
   Play, Pause, RotateCcw, Crosshair, Zap, Shield, Plane,
@@ -8,8 +8,7 @@ import {
   Brain, GitBranch, Sun, Moon, HeartPulse, ShieldPlus, Anchor,
 } from "lucide-react";
 import { XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from "recharts";
-import MapView from "./MapView.jsx";
-import { PI2, DEG, VI, THEMES, DRONE_SPECS, gpsToM, compassLabel } from "./droneverse/constants.js";
+import { PI2, DEG, VI, THEMES, DRONE_SPECS, compassLabel } from "./droneverse/constants.js";
 import { callAI } from "./droneverse/api.js";
 import { FlightDynamics } from "./droneverse/FlightDynamics.js";
 import { SwarmController } from "./droneverse/SwarmController.js";
@@ -18,9 +17,18 @@ import { EmergenceDetector } from "./droneverse/EmergenceDetector.js";
 import { MissionPhaseEngine } from "./droneverse/MissionPhaseEngine.js";
 import { MISSIONS } from "./droneverse/missions.js";
 import { ErrorBoundary } from "./droneverse/ErrorBoundary.jsx";
-import RadarPPI from "./droneverse/RadarPPI.jsx";
-import Viewport3D from "./droneverse/Viewport3D.jsx";
-import Module18TacticalUI from "./Module18TacticalUI.jsx";
+
+// Lazy-load heavy view components (Three.js ~180KB, MapLibre ~120KB, Module18 ~50KB)
+const MapView = lazy(() => import("./MapView.jsx"));
+const RadarPPI = lazy(() => import("./droneverse/RadarPPI.jsx"));
+const Viewport3D = lazy(() => import("./droneverse/Viewport3D.jsx"));
+const Module18TacticalUI = lazy(() => import("./Module18TacticalUI.jsx"));
+
+const LazyFallback = () => (
+  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#7a90a8", fontFamily: "monospace", background: "#0a0e14" }}>
+    Loading...
+  </div>
+);
 
 
 
@@ -477,9 +485,9 @@ Format as plain text, no markdown.`;
             setLogs(prev => [{ m: `EMERGENCE: ${p.type} — ${p.desc}`, l: "info", t: Date.now() }, ...prev].slice(0, 40));
             if (kg) kg.addEvent(`${p.type}: ${p.desc}`, swRef.current.drones.filter(d => d.status === "ACTIVE" && d.spec.iff === "FRIENDLY").map(d => d.id));
           }
-          setEmergenceFeed(ed.getRecent());
+          setEmergenceFeed(ed.getRecent().slice(-50));
         } else {
-          setEmergenceFeed(ed.getRecent());
+          setEmergenceFeed(ed.getRecent().slice(-50));
         }
       }
     }, 50);
@@ -492,7 +500,7 @@ Format as plain text, no markdown.`;
   const eliminated = drAll.filter(d => d.status === "ELIMINATED").length;
 
   if (showSimView) {
-    return <Module18TacticalUI onBack={() => setShowSimView(false)} />;
+    return <Suspense fallback={<LazyFallback />}><Module18TacticalUI onBack={() => setShowSimView(false)} /></Suspense>;
   }
 
   return (
@@ -643,7 +651,7 @@ Format as plain text, no markdown.`;
               {/* MAP 70% */}
               <div style={{ width: "70%", position: "relative" }}>
                 <div style={{ position: "absolute", inset: 0 }}>
-                  <ErrorBoundary name="MapView"><MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} victims={mis?.victims} /></ErrorBoundary>
+                  <ErrorBoundary name="MapView"><Suspense fallback={<LazyFallback />}><MapView drones={dr} threats={th} waypoints={wp} selectedId={sel} onSelect={setSel} mission={mis} victims={mis?.victims} /></Suspense></ErrorBoundary>
                 </div>
                 <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: "rgba(0,0,0,0.7)", padding: "4px 10px", borderRadius: 4, fontSize: 12, color: "#00e5ff", zIndex: 2 }}><MapPin size={12} /> BẢN ĐỒ VỆ TINH</div>
               </div>
@@ -696,7 +704,7 @@ Format as plain text, no markdown.`;
               </div>
             </div>}
             {(vw === "split" || vw === "3d") && <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-              <ErrorBoundary name="Viewport3D"><Viewport3D drones={dr} threats={th} waypoints={wp} selectedId={sel} camMode={camMode} windSpd={windSpd} threeTheme={T.three} T={T} /></ErrorBoundary>
+              <ErrorBoundary name="Viewport3D"><Suspense fallback={<LazyFallback />}><Viewport3D drones={dr} threats={th} waypoints={wp} selectedId={sel} camMode={camMode} windSpd={windSpd} threeTheme={T.three} T={T} /></Suspense></ErrorBoundary>
               <div style={{ position: "absolute", top: 8, left: 8, display: "flex", alignItems: "center", gap: 4, background: T.bgOverlay, padding: "4px 10px", borderRadius: 4, fontSize: 11, color: T.textMuted }}><Box size={12} /> 3D TACTICAL</div>
               <div style={{ position: "absolute", top: 8, right: 8, display: "flex", gap: 3, zIndex: 2 }}>
                 {[["orbit", RotateCcw], ["chase", Eye], ["topdown", Maximize2], ["cinematic", Film]].map(([md, Icon]) => (
@@ -714,7 +722,7 @@ Format as plain text, no markdown.`;
                 <button onClick={() => setShowGraphOverlay(!showGraphOverlay)} style={{ padding: "6px 10px", borderRadius: 4, minHeight: 32, border: "none", cursor: "pointer", background: showGraphOverlay ? "#a855f730" : "#111", color: showGraphOverlay ? "#a855f7" : "#40a070", fontSize: 12, fontFamily: "inherit", fontWeight: 600 }}><GitBranch size={9} /></button>
                 {[200, 400, 600, 800].map(r => <button key={r} onClick={() => setRng(r)} style={{ padding: "6px 10px", borderRadius: 4, minHeight: 32, border: "none", cursor: "pointer", background: rng === r ? "#00aa60" : T.bgCard, color: rng === r ? "#00ff80" : "#40a070", fontSize: 12, fontFamily: "inherit", fontWeight: 600 }}>{r}</button>)}
               </div>
-              <ErrorBoundary name="RadarPPI"><RadarPPI drones={dr} threats={th} waypoints={wp} radarRange={rng} selectedId={sel} onSelect={setSel} onAddWaypoint={addWaypoint} wind={{ dir: windDir, speed: windSpd }} graphOverlay={showGraphOverlay} kg={kgRef.current} radarTheme={T.radar} /></ErrorBoundary>
+              <ErrorBoundary name="RadarPPI"><Suspense fallback={<LazyFallback />}><RadarPPI drones={dr} threats={th} waypoints={wp} radarRange={rng} selectedId={sel} onSelect={setSel} onAddWaypoint={addWaypoint} wind={{ dir: windDir, speed: windSpd }} graphOverlay={showGraphOverlay} kg={kgRef.current} radarTheme={T.radar} /></Suspense></ErrorBoundary>
             </div>}
           </div>
           {/* BOTTOM */}

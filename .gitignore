@@ -19,6 +19,12 @@ __pycache__
 *.pyc
 .venv
 
+# Large media assets — use external storage
+*.mp4
+*.mov
+*.avi
+*.mkv
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

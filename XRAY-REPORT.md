@@ -1,477 +1,478 @@
-# RTR DroneVerse — Báo cáo X-Ray
+# RTR DRONEVERSE — X-RAY REPORT (FULL)
 
-**Dự án:** RTR DroneVerse — Tactical UAV Simulator
-**Vị trí:** `/sessions/amazing-inspiring-goodall/mnt/rtr-simulator/`
-**Ngày tạo báo cáo:** 2026-03-25
-**Định dạng:** Vibecode X-Ray Report
+> Generated: 2026-04-26 | Analyzer: Claude Opus 4.6
+> Scope: Full codebase audit — architecture, performance, security, tests, optimization roadmap
 
 ---
 
-## Executive Summary
+## 1. PROJECT IDENTITY
 
-RTR DroneVerse là một ứng dụng mô phỏng UAV chiến thuật được xây dựng bằng React 19.2.4 và Three.js, tích hợp AI (Anthropic Claude) cho tư vấn chiến thuật thực thời gian. Dự án hiện đang hoạt động nhưng có **vấn đề kiến trúc nghiêm trọng**: file `DroneVerse.jsx` là một monolith 2032 dòng chứa toàn bộ logic ứng dụng, cần được tái cấu trúc.
-
-**Status:** PRODUCTION (Deployed on Render.com) — **REFACTOR REQUIRED**
+| Metric | Value |
+|--------|-------|
+| Name | RTR DroneVerse — Tactical UAV Simulator |
+| Purpose | GPS-denied UAV navigation simulation + tactical C2 interface |
+| Repository | github.com/nclamvn/rtr-simulator |
+| Branch | `main` (single branch, linear history) |
+| Total commits | 36 |
+| Lifespan | 2026-03-24 → 2026-04-26 (33 days) |
+| License | Proprietary — Real-Time Robotics |
+| Deploy | Render.com (Node 22 + Docker) |
 
 ---
 
-## I. Tech Stack & Dependencies
+## 2. CODEBASE METRICS
+
+### Lines of Code
+
+| Language | Source LOC | Test LOC | Files |
+|----------|-----------|----------|-------|
+| Python (physics engine) | 7,156 | 4,084 | 48 |
+| JavaScript/JSX (frontend) | 4,040 | 228 | 20 |
+| CSS | 23 | — | 1 |
+| HTML | 27 | — | 1 |
+| JSON (config) | 4,510 | — | 3 |
+| **Total** | **~15,756** | **4,312** | **73** |
+
+### Test-to-Source Ratio
+- Python: **57%** (4,084 test / 7,156 source) — excellent
+- JavaScript: **5.6%** (228 test / 4,040 source) — weak
+- Overall: **27.4%** — adequate
+
+### File Size Distribution (Top 10)
+
+| File | Lines | Role |
+|------|-------|------|
+| `Module18TacticalUI.jsx` | 938 | Tactical C2 interface |
+| `DroneVerse.jsx` | 807 | Main UI orchestration |
+| `trajectory.py` | 686 | Core simulation loop |
+| `SimulationView.jsx` | 632 | Legacy sim view (backup) |
+| `export_simulation.py` | 537 | Data export pipeline |
+| `types.py` | 459 | 28 dataclasses + constants |
+| `test_sensors.py` | 400 | Sensor model tests |
+| `run_gate2.py` | 396 | Monte Carlo gate runner |
+| `ekf.py` | 385 | 17D Error-State EKF |
+| `Viewport3D.jsx` | 385 | Three.js 3D viewport |
+
+---
+
+## 3. ARCHITECTURE — 3 TIER
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  FRONTEND — React 19 + Vite 8                                │
+│                                                              │
+│  DroneVerse.jsx (807)  ← main orchestration, 17 useState     │
+│  ├── MapView.jsx (142) ← MapLibre satellite + GeoJSON        │
+│  ├── Viewport3D.jsx (385) ← Three.js 4 camera modes          │
+│  ├── RadarPPI.jsx (188) ← Canvas radar scope                 │
+│  ├── Module18TacticalUI.jsx (938) ← C2 dark ops interface    │
+│  └── droneverse/                                             │
+│      ├── FlightDynamics.js (28) ← arcade physics             │
+│      ├── SwarmController.js (57) ← fleet AI + combat          │
+│      ├── KnowledgeGraph.js (25) ← entity graph                │
+│      ├── EmergenceDetector.js (50) ← swarm patterns           │
+│      ├── MissionPhaseEngine.js (35) ← state machine           │
+│      └── missions.js (143) ← 14 mission definitions          │
+├──────────────────────────────────────────────────────────────┤
+│  BACKEND — Express.js + Python                               │
+│                                                              │
+│  server.js (135) ← API proxy + security (helmet, rate-limit) │
+│  sim_server.py (58) ← Python sim HTTP server                 │
+│  backend/drone_graph/ ← MiroFish graph services              │
+├──────────────────────────────────────────────────────────────┤
+│  PHYSICS ENGINE — Python (core/physics/)                     │
+│                                                              │
+│  dynamics/six_dof.py ← 6-DOF rigid body (RK4)               │
+│  estimator/ekf.py ← 17D Error-State EKF (Joseph form)       │
+│  sensors/ ← IMU (Allan variance) + Camera (pinhole) + Mag   │
+│  landmark/ ← chain + cone distribution + risk-shaped policy  │
+│  terrain/ ← Perlin procedural + DEM loader                   │
+│  wind/dryden.py ← MIL-HDBK-1797 turbulence                  │
+│  association/pipeline.py ← 5-step feature matching           │
+│  sim/ ← trajectory + Monte Carlo + report generation         │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Physics Engine Dependency Graph
+
+```
+TrajectorySimulator
+├─ SixDOFDynamics (100 Hz RK4 integration)
+│  └─ DroneConfig (mass, drag, battery)
+├─ IMUModel (accel/gyro bias + random walk)
+├─ CameraModel (10 Hz pinhole + radial distortion)
+├─ MagnetometerModel (compass + EMI corruption)
+├─ ErrorStateEKF (17D state estimation)
+│  ├─ SixDOFDynamics (propagation via F/Q matrices)
+│  └─ CameraModel (measurement update via H matrix)
+├─ FiveStepPipeline (data association)
+│  └─ CameraModel (feature detection + Hamming distance)
+├─ ConsistencyMonitor (NIS windowing + P inflation)
+├─ ProceduralTerrain (LOS checks + roughness)
+├─ DrydenWindField (terrain-coupled turbulence)
+└─ ConeLandmarkGenerator (risk-shaped cone policy)
+```
+
+### EKF State Vector (17D)
+
+```
+x = [p(3), v(3), θ(3), b_a(3), b_g(3), w(2)]
+     ─────  ────  ────  ─────   ─────   ────
+     pos    vel   att   accel   gyro    wind
+                        bias    bias    est
+```
+
+---
+
+## 4. TEST HEALTH
+
+### Status: 328/328 PASS (100%)
+
+| Suite | Tests | Pass | Fail | Runtime |
+|-------|-------|------|------|---------|
+| Python (pytest) | 303 | 303 | 0 | 23.45s |
+| JavaScript (vitest) | 25 | 25 | 0 | 0.14s |
+| **Total** | **328** | **328** | **0** | **23.59s** |
+
+### Python Test Coverage by Module
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| Sensors (IMU, Camera, Mag) | 26 | Full |
+| Dynamics (6-DOF, Quaternion) | 25 | Full |
+| EKF (predict, update, gate) | 18 | Full |
+| Landmarks (chain, cone, cluster) | 37 | Full |
+| Cone guidance | 18 | Full |
+| Wind (Dryden) | 12 | Full |
+| Terrain (procedural, DEM) | 14 | Full |
+| Association pipeline | 10 | Full |
+| Consistency monitor | 11 | Full |
+| Containment boundary | 8 | Full |
+| Types + Config | 21 | Full |
+| Monte Carlo | 9 | Full |
+| Report generation | 9 | Full |
+| Trajectory + Integration | 11 | Basic |
+| Hardened (risk cone, modes) | 24 | Full |
+| Stubs (ABC contracts) | 8 | Minimal |
+
+### Test Gaps (NOT covered)
+
+| Gap | Impact | Priority |
+|-----|--------|----------|
+| No React component tests | UI regressions undetected | HIGH |
+| No E2E tests (Cypress/Playwright) | Full-flow bugs missed | HIGH |
+| No API integration tests | server.js routes untested | MEDIUM |
+| No visual regression tests | UI drift undetected | LOW |
+
+---
+
+## 5. BUILD & DEPLOY
+
+### Production Build
+
+| Metric | Value | Status |
+|--------|-------|--------|
+| Build tool | Vite 8.0.2 | OK |
+| Build time | 650ms | OK |
+| Bundle JS | 2,374 KB (645 KB gzip) | WARNING |
+| Bundle CSS | 70 KB (10 KB gzip) | OK |
+| Chunks | 1 (no code splitting) | PROBLEM |
+
+### Bundle Breakdown (estimated)
+
+| Library | Size (gzip) | Used In | Lazy-loadable? |
+|---------|-------------|---------|----------------|
+| Three.js | ~180KB | Viewport3D only | YES |
+| MapLibre GL | ~120KB | MapView only | YES |
+| Recharts | ~50KB | DroneVerse telemetry only | YES |
+| React + React-DOM | ~45KB | Everywhere | NO |
+| Lucide icons | ~25KB | Everywhere | NO |
+| App code | ~225KB | — | Partially |
+
+### Deploy Issues
+
+| Component | Issue |
+|-----------|-------|
+| Dockerfile | No npm ci, installs devDeps in prod, no healthcheck, runs as root |
+| render.yaml | No PORT config, devDeps in build |
+| server.js | API keys logged to console (line 133-134) |
+
+---
+
+## 6. SECURITY AUDIT
+
+### RED — Critical
+
+| # | Issue | Location |
+|---|-------|----------|
+| 1 | API keys logged to console | `server.js:133-134` |
+| 2 | SPA fallback serves index.html for ANY path | `server.js:129` |
+
+### YELLOW — Important
+
+| # | Issue | Location |
+|---|-------|----------|
+| 3 | No CSRF protection on POST routes | `server.js` |
+| 4 | MiroFish proxy has no rate limiting | `server.js:102-116` |
+| 5 | Python sim blocks HTTP thread indefinitely | `sim_server.py` |
+| 6 | No request timeout on AI calls | `server.js:44-99` |
+| 7 | CORS allows any origin | `sim_server.py:32` |
+| 8 | CSP disabled entirely for Three.js | `server.js:16` |
+
+---
+
+## 7. PERFORMANCE BOTTLENECKS
 
 ### Frontend
-| Công nghệ | Phiên bản | Mục đích |
-|-----------|----------|---------|
-| React | 19.2.4 | Framework UI |
-| Vite | 8.0.1 | Build tool & dev server |
-| Three.js | 0.183.2 | 3D viewport render |
-| MapLibre GL | 5.21.0 | Satellite map & GIS |
-| Recharts | 3.8.0 | Telemetry charts |
-| Lucide React | 1.0.1 | Icon library |
 
-### Backend & Deployment
-| Công nghệ | Phiên bản | Mục đích |
-|-----------|----------|---------|
-| Express.js | 4.22.1 | API proxy server |
-| Node.js | (runtime) | Server runtime |
-| Render.com | (platform) | Hosting & deployment |
+| Issue | Impact | Location |
+|-------|--------|----------|
+| DroneVerse re-renders every 50ms | Full tree re-render | `DroneVerse.jsx:377` |
+| No React.memo on children | Map/3D/radar re-render every tick | All children |
+| O(n²) swarm proximity checks | 2,916 checks/tick for 54 drones | `SwarmController.js` |
+| transformSimData not memoized | Recalculates every playIdx | `Module18TacticalUI.jsx:37` |
+| Canvas full-redraw every frame | Grid+cone+paths+landmarks | `Module18TacticalUI.jsx:325` |
 
-### AI Integration
-- **Primary:** Anthropic Claude API (debrief, scenario generation, advisor)
-- **Fallback:** OpenAI API (server.js line 40+)
-- **Config:** Env vars `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+### Python
+
+| Issue | Impact | Location |
+|-------|--------|----------|
+| Monte Carlo sequential | 1000 runs = 8+ hours | `monte_carlo.py:61` |
+| Full trajectory in RAM | 50-100MB for 60s sim | `trajectory.py` |
+| Float64 full precision export | 555KB JSON, could be 280KB | `run_simulation.py:119` |
+
+### Bundle
+
+| Optimization | Current | After | Savings |
+|-------------|---------|-------|---------|
+| Code-split Three.js | 645KB gzip | ~465KB | ~180KB deferred |
+| Lazy-load MapLibre | Always loaded | On demand | ~120KB deferred |
+| Replace Recharts | 50KB | Custom SVG | ~50KB |
+| **Total** | **645KB** | **~400KB** | **~38% reduction** |
 
 ---
 
-## II. Kiến trúc File & Cấu trúc Dự án
+## 8. CODE QUALITY ISSUES
+
+### Critical
+
+| # | Issue | File |
+|---|-------|------|
+| 1 | DroneVerse.jsx 807-line monolith (17 useState) | `DroneVerse.jsx` |
+| 2 | Memory leak: emergenceFeed grows unbounded | `DroneVerse.jsx:55` |
+| 3 | Race condition: AI requests return out-of-order | `DroneVerse.jsx:261` |
+| 4 | 75MB video files committed to Git | Root |
+
+### Major
+
+| # | Issue | File |
+|---|-------|------|
+| 5 | No CI/CD pipeline | Missing |
+| 6 | SimulationView.jsx is dead code | `SimulationView.jsx` |
+| 7 | Magic numbers (turn rate, bank scale, separation) | Multiple |
+| 8 | gpsToM() function unused | `constants.js` |
+| 9 | MiroFish API never invoked from UI | `api.js:15-81` |
+| 10 | No Python lock file | `pyproject.toml` |
+
+---
+
+## 9. DEVELOPMENT TIMELINE
 
 ```
-rtr-simulator/
-├── index.html                    [14 lines] SPA entry point
-├── package.json                  Project manifest
-├── vite.config.js               [11 lines] React plugin + API proxy config
-├── server.js                    [88 lines] Express proxy + /api/ai endpoint
-├── render.yaml                  Render deployment config
-├── src/
-│   ├── main.jsx                [39 lines] Three.js global initialization
-│   ├── DroneVerse.jsx          [2032 lines] ⚠️ MONOLITH
-│   ├── MapView.jsx             [189 lines] MapLibre integration
-│   └── index.css               [22 lines] Base CSS reset
-├── public/
-│   ├── favicon.svg
-│   └── videos/                 📹 NEW - Demo videos
-│       ├── hera-tiep-te.mp4    (9.4 MB)
-│       ├── hera-vung-lu.mp4    (59 MB)
-│       └── loa-tiep-can.mp4    (5.4 MB)
-└── dist/                        Built output (production)
-```
+Mar 24 ─ ▌ Initial commit
+Mar 25 ─ ████████████████████████ 24 commits (BIG BANG DAY)
+         ├─ Combat UX, satellite map, HTML markers
+         ├─ Theme system, Tây Hoà BQP mission
+         ├─ Express proxy + Render deploy
+         ├─ OpenAI fallback, refactor → 8 modules
+         └─ Quality upgrade (tests, a11y, error boundaries)
+Mar 26 ─ █████ 5 commits — MiroFish Phases 1-5
+Mar 27 ─ ███ 3 commits — GPS-Denied Nav Engine + Monte Carlo
 
-**Tổng dung lượng video:** ~74 MB (tự hosting)
+         ⟨ 28-day gap ⟩
 
----
-
-## III. Phân tích Chi tiết Các Component
-
-### A. **DroneVerse.jsx** — Monolith (2032 dòng) ⚠️
-
-Đây là **vấn đề kiến trúc chính** của dự án. File này chứa:
-
-#### 1. Hệ thống Theme
-- Dark mode / Light mode toggle
-- CSS variables + Tailwind integration
-
-#### 2. Localization
-- Vietnamese (VI) object đầy đủ
-- Tất cả UI strings được dịch
-
-#### 3. Drone Types (4 loại)
-| Loại Drone | Lớp | Mục đích | Đặc điểm |
-|-----------|-----|---------|---------|
-| HERA-S | Scout | Trinh sát | Tốc độ cao, endurance |
-| HERA-C | Cargo | Vận chuyển | Tải trọng lớn |
-| VEGA-X | Combat | Chiến đấu | Vũ khí, cơ động |
-| BOGEY | Hostile | Địch | AI tự trị, threat |
-
-#### 4. Các Class Logic
-| Class | Dòng | Chức năng |
-|-------|------|----------|
-| **FlightDynamics** | ~150 | Physics engine: heading, altitude, speed, battery, wind effects |
-| **SwarmController** | ~300 | Fleet management, waypoint following, threat avoidance, intercept AI |
-| **KnowledgeGraph** | ~200 | Relationship tracking (drone-drone, drone-threat, drone-sector) |
-| **EmergenceDetector** | ~150 | Detect emergent swarm behaviors |
-| **MissionPhaseEngine** | ~250 | Multi-phase mission progression & state |
-
-#### 5. UI Components (embedded)
-- **RadarPPI** (~300 lines): Radar display với sweep animation
-- **Viewport3D** (~400 lines): Three.js 3D tactical view (4 camera modes)
-- **Main DroneVerse Component** (~500 lines): Sidebar, header, telemetry panel, modals
-
-#### 6. Missions Array
-6 missions được định nghĩa với:
-- Rescue scenarios
-- Patrol missions
-- Escort operations
-- Light show demonstrations
-- Multi-phase objectives
-
-#### 7. AI Integration
-- **Claude API calls** cho:
-  - Mission debrief & analysis
-  - Scenario generation
-  - Real-time tactical advisor
-- **Anthropic SDK** + fallback to OpenAI
-
----
-
-### B. **MapView.jsx** (189 dòng)
-
-**Trạng thái:** ✅ Tốt - Tách biệt rõ ràng
-
-**Chức năng:**
-- MapLibre GL satellite imagery render
-- Drone position markers (real-time)
-- Threat zones visualization
-- Flight path trails
-- Victim/objective markers
-- Interactive map controls
-
-**Props:**
-- `drones`: Mảng drone state
-- `selectedDrone`: Drone hiện tại
-- `threats`: Threat markers
-- `mapStyle`: Style config
-- `onDroneSelect`: Selection handler
-
----
-
-### C. **server.js** (88 dòng)
-
-**Trạng thái:** ✅ Tốt - API proxy pattern
-
-**Chức năng:**
-1. **Phục vụ static files** từ `dist/`
-2. **/api/ai endpoint**
-   - Nhận AI request từ frontend
-   - Thử Anthropic API trước
-   - Fallback to OpenAI nếu lỗi
-3. **/health endpoint** cho monitoring
-4. **CORS & middleware** setup
-5. **Timezone handling** (UTC)
-
-**Endpoint:**
-```javascript
-POST /api/ai
-Content-Type: application/json
-{ "prompt": "...", "model": "claude-opus" }
-
-Fallback chain:
-Anthropic → OpenAI
+Apr 24 ─ ▌ ConeGuidance fix + telemetry UI
+Apr 26 ─ ▌ Tactical C2 interface + Python 3.9 compat
 ```
 
 ---
 
-## IV. Key Features & Capabilities
+## 10. ASSET INVENTORY
 
-### 1. Multi-Mission Simulation
-- 6 missions đã được cấu hình
-- Multi-phase objectives (rescue → return, patrol → intercept, etc.)
-- Dynamic mission state machine
-- Progress tracking
-
-### 2. Flight Dynamics Engine
-- **Realistic physics:**
-  - Heading, altitude, speed calculations
-  - Battery management & depletion
-  - Wind effects & resistance
-  - Acceleration/deceleration modeling
-- **Collision avoidance** logic
-- **Threat detection** radius
-
-### 3. Swarm Intelligence
-- **SwarmController** quản lý fleet:
-  - Waypoint following
-  - Threat avoidance
-  - Hostile intercept (BOGEY AI)
-  - Coordinated movement
-- **Knowledge graph** tracking relationships
-- **Emergent behavior detection**
-
-### 4. Visualization (4 View Modes)
-| Mode | Tool | Mô tả |
-|------|------|-------|
-| **Map** | MapLibre GL | Satellite imagery + drone markers |
-| **Split** | Map + 3D | Side-by-side views |
-| **Radar** | RadarPPI | Tactical radar with sweep |
-| **3D** | Three.js | Full 3D tactical viewport |
-
-### 5. AI-Powered Features
-- **Tactical Advisor:** Real-time recommendations (Claude API)
-- **Mission Debrief:** Post-mission analysis & lessons learned
-- **Scenario Generator:** AI tạo missions ngẫu nhiên
-- **Fallback:** OpenAI nếu Anthropic unavailable
-
-### 6. Internationalization
-- **Vietnamese UI** (VI object ~500+ strings)
-- **Military terminology** (Việt-English hybrid)
-- All UI fully localized
-
-### 7. Theme System
-- **Dark Mode:** Professional tactical aesthetic
-- **Light Mode:** Standard UI
-- Toggle in header + localStorage persistence
+| File | Size | Action Needed |
+|------|------|---------------|
+| Edited HERA vùng lũ.mp4 | 60 MB | Move to CDN |
+| Edited HERA tiếp tế.mp4 | 9.7 MB | Move to CDN |
+| Edited loa để tiếp cận.mp4 | 5.0 MB | Move to CDN |
+| public/sim_data.json | 555 KB | Compress (→ 280KB) |
+| **Total bloat** | **~75 MB** | |
 
 ---
 
-## V. Deployment & Infrastructure
+## 11. OPTIMIZATION ROADMAP — 12 TIPs
 
-### Hosting
-**Platform:** Render.com Web Service
-
-**Build Process:**
-```bash
-npm install --include=dev
-npm run build    # Vite → dist/
-```
-
-**Start Command:**
-```bash
-node server.js
-```
-- Serves: `dist/` (React SPA)
-- Proxy: `/api/*` → localhost:5000 (AI backend)
-
-### Environment Variables
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
-NODE_ENV=production
-```
-
-### Render.yaml Configuration
-```yaml
-services:
-  - type: web
-    name: rtr-droneverse
-    env: node
-    buildCommand: npm install --include=dev && npm run build
-    startCommand: node server.js
-    envVars:
-      - key: ANTHROPIC_API_KEY
-        scope: build,runtime
-      - key: OPENAI_API_KEY
-        scope: build,runtime
-```
-
----
-
-## VI. Code Quality & Health Assessment
-
-### ✅ Điểm Mạnh
-1. **Clean separation:** MapView.jsx, server.js tách biệt tốt
-2. **AI integration:** Solid Claude API + fallback pattern
-3. **Feature-rich:** 4 view modes, 6 missions, swarm logic
-4. **Localization:** Full Vietnamese UI
-5. **Deployment:** Production-ready on Render
-6. **Video assets:** 3 demo videos (~74 MB) hosted locally
-
-### ⚠️ Vấn đề Nghiêm Trọng
-| Vấn đề | Mức độ | Chi tiết |
-|-------|-------|---------|
-| **Monolith (DroneVerse.jsx 2032 lines)** | CRITICAL | Toàn bộ logic, state, UI trong 1 file |
-| **No tests** | HIGH | Zero unit/integration tests |
-| **No TypeScript** | MEDIUM | Type safety không có |
-| **No error boundaries** | HIGH | React crash recovery không có |
-| **No component isolation** | HIGH | Khó refactor, khó test |
-
-### 🔧 Cần Cải thiện
-1. **Refactor DroneVerse.jsx** → 8-10 components:
-   - `<Sidebar />` — Mission/drone selection
-   - `<Header />` — Theme, AI status
-   - `<ViewManager />` — View mode switching
-   - `<RadarDisplay />` — PPI component
-   - `<TelemetryPanel />` — Stats + charts
-   - `<ScenarioGenerator />` — AI scenarios
-   - `<TacticalAdvisor />` — Real-time advisor
-   - `<DroneDashboard />` — Drone details modal
-   - `<MissionPhase />` — Mission progression UI
-   - `<VideoDemo />` — Video player (NEW)
-
-2. **Add TypeScript** cho type safety
-3. **Add Error Boundaries** cho crash recovery
-4. **Add Tests** (Jest/React Testing Library):
-   - FlightDynamics: physics tests
-   - SwarmController: behavior tests
-   - Mission scenarios: progression tests
-
----
-
-## VII. Video Integration (NEW)
-
-### Video Assets
-| Tên file | Dung lượng | Mô tả |
-|---------|-----------|-------|
-| `hera-tiep-te.mp4` | 9.4 MB | HERA Scout demo |
-| `hera-vung-lu.mp4` | 59 MB | HERA Cargo operation |
-| `loa-tiep-can.mp4` | 5.4 MB | LOA intercept scenario |
-| **Total** | **~74 MB** | Self-hosted in `public/videos/` |
-
-### Planned Integration
-```jsx
-// Upcoming: <VideoDemo /> component
-<VideoDemo
-  videos={[
-    { title: "HERA Scout Reconnaissance", src: "/videos/hera-tiep-te.mp4" },
-    { title: "HERA Cargo Supply Mission", src: "/videos/hera-vung-lu.mp4" },
-    { title: "LOA Intercept Maneuvers", src: "/videos/loa-tiep-can.mp4" }
-  ]}
-/>
-```
-
-**Approach:** Self-hosted (no YouTube dependency)
-**UI:** New "VIDEO DEMO" tab in sidebar
-
----
-
-## VIII. Performance Metrics & Observations
-
-### Bundle Size (estimated)
-| Package | Size |
-|---------|------|
-| React 19 | ~42 KB |
-| Three.js | ~150 KB |
-| MapLibre GL | ~80 KB |
-| Recharts | ~60 KB |
-| App code (minified) | ~180 KB |
-| **Total (gzipped)** | **~380 KB** |
-
-### Runtime Performance
-- **3D rendering:** Smooth at 60 FPS (Three.js optimized)
-- **Map updates:** Real-time drone tracking (MapLibre efficient)
-- **Swarm simulation:** 10-15 drones smooth, 20+ drones CPU-heavy
-- **AI calls:** 2-5s latency (API roundtrip)
-
-### Scaling Considerations
-- **Drone limit:** ~20-25 before frame rate impact
-- **Mission complexity:** 6-phase missions + AI → manageable
-- **Video streaming:** 74 MB total → fast local serving
-
----
-
-## IX. Security Assessment
-
-### API Security
-✅ **server.js:**
-- API keys stored in env vars (not hardcoded)
-- CORS configured
-- /health endpoint for monitoring
-- Express middleware for safety
-
-⚠️ **Frontend:**
-- AI calls proxied through server (good)
-- No sensitive data exposed in SPA
-- Anthropic/OpenAI keys hidden in backend
-
-### Data Handling
-- No persistent database (in-memory only)
-- No PII storage
-- Mission data ephemeral
-
----
-
-## X. Roadmap & Recommendations
-
-### Ngắn hạn (1-2 tuần)
-1. ✅ Add `<VideoDemo />` component (2-3 hours)
-2. Add "VIDEO DEMO" tab to sidebar (1 hour)
-3. Test video playback on Render (30 min)
-
-### Trung hạn (1-2 tháng)
-1. **Refactor DroneVerse.jsx** → 8-10 components (40-60 hours)
-2. **Add TypeScript** gradually (20-30 hours)
-3. **Add error boundaries** (4-6 hours)
-4. **Add basic tests** for FlightDynamics, SwarmController (20-30 hours)
-
-### Dài hạn (3-6 tháng)
-1. **Real-time multiplayer** (multiple clients control swarms)
-2. **Persistent mission save/load** (database)
-3. **Advanced AI** (claude-opus-4 integration for complex scenarios)
-4. **Hardware integration** (real drone telemetry feed)
-5. **WebGL optimizations** for 30+ drone swarms
-
----
-
-## XI. Dependencies Audit
-
-### Production Dependencies
-```json
-{
-  "react": "^19.2.4",
-  "react-dom": "^19.2.4",
-  "three": "^0.183.2",
-  "maplibre-gl": "^5.21.0",
-  "recharts": "^3.8.0",
-  "lucide-react": "^1.0.1",
-  "axios": "^latest",
-  "express": "^4.22.1",
-  "cors": "^latest"
-}
-```
-
-**Status:** All up-to-date, no critical vulnerabilities detected
-
-### Dev Dependencies
-- `@vitejs/plugin-react` (Vite + React fast refresh)
-- `tailwindcss` (utility-first CSS)
-
----
-
-## XII. Known Issues & Limitations
-
-| Issue | Impact | Workaround |
-|-------|--------|-----------|
-| 2032-line monolith | Code maintainability | Refactor planned Q2 |
-| No offline support | Requires API connectivity | Implement local storage |
-| Video files (74 MB) | Slower initial deploy | Pre-cache videos on startup |
-| Swarm limit ~25 drones | Scalability | Optimize threejs batching |
-| No persistent save | Data loss on refresh | Add IndexedDB layer |
-| React crash recovery | User experience | Add error boundaries |
-
----
-
-## XIII. File Size Analysis
+### Priority Matrix
 
 ```
-Total Project Size (with videos):
-├── src/ code             ~2.5 MB
-├── public/videos/        ~74 MB
-├── node_modules/         ~450 MB (dev only)
-├── dist/ (production)    ~520 KB (minified)
-└── Total (deployed)      ~520 KB + videos served via CDN
+         IMPACT
+    HIGH ┃ TIP-1  TIP-2  TIP-3
+         ┃ TIP-4  TIP-5
+    MED  ┃ TIP-6  TIP-7  TIP-8
+         ┃ TIP-9
+    LOW  ┃ TIP-10 TIP-11 TIP-12
+         ┗━━━━━━━━━━━━━━━━━━━━━
+          QUICK    MED    HARD
+              EFFORT →
+```
 
-Video Breakdown:
-├── hera-tiep-te.mp4      9.4 MB  (Scout demo)
-├── hera-vung-lu.mp4      59.0 MB (Cargo demo)
-└── loa-tiep-can.mp4      5.4 MB  (Intercept demo)
+### TIP-1: Security — Fix API Key Logging + SPA Fallback
+```
+EFFORT:   15 min    IMPACT: CRITICAL
+TARGET:   server.js
+
+1. Remove console.log of API keys (line 133-134)
+2. Whitelist static paths in SPA fallback (line 129)
+3. Add 30s timeout on AI proxy calls with AbortController
+```
+
+### TIP-2: Bundle — Code-Split Heavy Libraries
+```
+EFFORT:   30 min    IMPACT: HIGH — 645KB → ~400KB (38% reduction)
+TARGET:   vite.config.js, DroneVerse.jsx, main.jsx
+
+1. React.lazy() for Viewport3D, MapView, Module18TacticalUI
+2. Named imports for Three.js (not import *)
+3. Manual chunks in vite config (three, maplibre, recharts)
+```
+
+### TIP-3: Refactor — Split DroneVerse Monolith
+```
+EFFORT:   2 hours   IMPACT: HIGH — maintainability + render perf
+TARGET:   DroneVerse.jsx (807 lines → 5-6 files × ~150 lines)
+
+Split into: DroneVerse shell, useSimulation hook, TelemetryPanel,
+ControlPanel, AIAdvisor, useSwarm hook
+```
+
+### TIP-4: Performance — Memoize Render Pipeline
+```
+EFFORT:   30 min    IMPACT: HIGH — eliminate 80% re-renders
+TARGET:   Module18TacticalUI.jsx, DroneVerse.jsx
+
+1. useMemo for transformSimData
+2. React.memo on MapView, Viewport3D, RadarPPI
+3. Throttle telemetry updates (50ms → 250ms)
+```
+
+### TIP-5: CI/CD — GitHub Actions Pipeline
+```
+EFFORT:   45 min    IMPACT: HIGH — catch regressions
+TARGET:   .github/workflows/ci.yml (new)
+
+Jobs: test-python (pytest), test-js (vitest), build (vite build)
+```
+
+### TIP-6: Data — Optimize sim_data.json
+```
+EFFORT:   20 min    IMPACT: MEDIUM — 555KB → 280KB (50%)
+TARGET:   run_simulation.py
+
+Round floats to 1dp, subsample sigma (5999 → 500 points)
+```
+
+### TIP-7: Assets — Remove Videos from Git
+```
+EFFORT:   15 min    IMPACT: MEDIUM — 75MB removed
+TARGET:   .gitignore + external storage
+```
+
+### TIP-8: Python — Monte Carlo Parallelization
+```
+EFFORT:   1 hour    IMPACT: MEDIUM — 4x speedup
+TARGET:   monte_carlo.py
+
+multiprocessing.Pool for independent simulation runs
+```
+
+### TIP-9: SwarmController — Spatial Hashing
+```
+EFFORT:   1 hour    IMPACT: MEDIUM — O(n²) → O(n)
+TARGET:   SwarmController.js
+
+Grid cells (50m) → only check 9 neighbors instead of all drones
+```
+
+### TIP-10: Dead Code Cleanup
+```
+EFFORT:   15 min    IMPACT: LOW
+TARGET:   SimulationView.jsx (delete), constants.js, api.js
+
+Remove unused functions, dead imports, legacy files
+```
+
+### TIP-11: Docker Hardening
+```
+EFFORT:   20 min    IMPACT: LOW
+TARGET:   Dockerfile
+
+Multi-stage build, non-root user, healthcheck, npm ci
+```
+
+### TIP-12: Python Dependency Locking
+```
+EFFORT:   10 min    IMPACT: LOW
+TARGET:   pyproject.toml → requirements.lock
+
+pip-compile for reproducible builds
 ```
 
 ---
 
-## XIV. Conclusion & Status Summary
+## 12. RECOMMENDED EXECUTION ORDER
 
-**RTR DroneVerse** là một dự án **sản xuất (production)** đang chạy trên Render.com với các tính năng tiên tiến:
-- ✅ Multi-mode UAV simulation (4 view modes)
-- ✅ AI-powered tactical advisor (Claude API)
-- ✅ Swarm intelligence & emergent behavior
-- ✅ Full Vietnamese localization
-- ✅ 3 demo videos tự host
-- ✅ Real-time flight dynamics
+### Session 1 — Security & Quick Wins (45 min)
+```
+TIP-1  → Fix API key logging + SPA fallback     (15 min)
+TIP-10 → Dead code cleanup                      (15 min)
+TIP-7  → Remove videos from git                 (15 min)
+```
 
-**Tuy nhiên**, vấn đề kiến trúc chính (**2032-line monolith**) cần được giải quyết trong 6 tháng tới để đảm bảo tính bảo trì và khả năng mở rộng dài hạn.
+### Session 2 — Performance (1.5 hours)
+```
+TIP-4  → Memoize render pipeline                (30 min)
+TIP-2  → Code-split heavy libraries             (30 min)
+TIP-6  → Optimize sim_data.json                 (20 min)
+```
 
-**Overall Status:** **PRODUCTION - REFACTOR REQUIRED** ⚠️
-**Risk Level:** MEDIUM (works well but needs architectural improvements)
-**Recommendation:** Proceed with deployment, prioritize refactoring in Q2
+### Session 3 — Architecture (2.5 hours)
+```
+TIP-3  → Split DroneVerse monolith              (2 hours)
+TIP-5  → CI/CD pipeline                        (30 min)
+```
+
+### Session 4 — Deep Optimization (2.5 hours)
+```
+TIP-9  → Spatial hashing for swarm             (1 hour)
+TIP-8  → Monte Carlo parallelization           (1 hour)
+TIP-11 → Docker hardening                      (20 min)
+TIP-12 → Python dependency locking             (10 min)
+```
 
 ---
 
-**Report Generated:** 2026-03-25
-**Format:** Vibecode X-Ray Report v1.0
-**Language:** Vietnamese (VI) + English (Technical Terms)
+## 13. SCORECARD
+
+| Dimension | Current | After 12 TIPs | Delta |
+|-----------|---------|---------------|-------|
+| Functionality | 9/10 | 9/10 | — |
+| Test coverage | 7/10 | 8/10 | +1 |
+| Security | 4/10 | 8/10 | +4 |
+| Performance | 5/10 | 8/10 | +3 |
+| Code quality | 6/10 | 8/10 | +2 |
+| DevOps | 3/10 | 7/10 | +4 |
+| Architecture | 7/10 | 8/10 | +1 |
+| **Overall** | **5.9/10** | **8.0/10** | **+2.1** |
+
+---
+
+*End of X-Ray Report — RTR DroneVerse*

@@ -32,27 +32,41 @@ app.use((req, res, next) => {
 app.use(express.static(join(__dirname, 'dist')));
 
 async function callAnthropic(messages, maxTokens) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages }),
-  });
-  if (!res.ok) throw new Error(`Anthropic ${res.status}`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message || 'Anthropic error');
-  return data;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: maxTokens, messages }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`Anthropic ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || 'Anthropic error');
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function callOpenAI(messages, maxTokens) {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
-    body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: maxTokens, messages }),
-  });
-  if (!res.ok) throw new Error(`OpenAI ${res.status}`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message || 'OpenAI error');
-  return { content: [{ text: data.choices?.[0]?.message?.content || '' }] };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
+      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: maxTokens, messages }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`OpenAI ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || 'OpenAI error');
+    return { content: [{ text: data.choices?.[0]?.message?.content || '' }] };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // AI Proxy — rate limited + input validated
@@ -99,19 +113,25 @@ app.post('/api/ai', aiLimiter, async (req, res) => {
 });
 
 // MiroFish Swarm Intelligence proxy
-app.all('/api/sim/*', async (req, res) => {
+app.all('/api/sim/*', aiLimiter, async (req, res) => {
   const path = req.path.replace('/api/sim', '');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
   try {
     const response = await fetch(`${MIROFISH_URL}/api${path}`, {
       method: req.method,
       headers: { 'Content-Type': 'application/json' },
       ...(req.method !== 'GET' && { body: JSON.stringify(req.body) }),
+      signal: controller.signal,
     });
     const data = await response.json();
     res.status(response.status).json(data);
   } catch (err) {
+    if (err.name === 'AbortError') return res.status(504).json({ error: 'MiroFish request timed out (30s)' });
     console.error('MiroFish proxy error:', err.message);
     res.status(502).json({ error: 'MiroFish backend unavailable', detail: err.message });
+  } finally {
+    clearTimeout(timeout);
   }
 });
 
@@ -126,9 +146,14 @@ app.get('/health', async (req, res) => {
   });
 });
 
-app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(join(__dirname, 'dist', 'index.html'));
+});
 
 app.listen(PORT, () => {
   console.log(`DroneVerse server on port ${PORT}`);
-  console.log(`AI providers: Anthropic=${ANTHROPIC_KEY ? 'YES' : 'NO'}, OpenAI=${OPENAI_KEY ? 'YES' : 'NO'}`);
+  console.log(`AI providers: Anthropic=${!!ANTHROPIC_KEY}, OpenAI=${!!OPENAI_KEY}`);
 });
