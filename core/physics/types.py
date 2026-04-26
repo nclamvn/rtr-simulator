@@ -487,3 +487,49 @@ class PNConfig:
 
     # Speed
     cruise_speed: float = 12.0                  # m/s maintain during PN
+
+
+@dataclass
+class LateralCorrection:
+    """A commanded lateral correction maneuver."""
+
+    bank_angle: float          # radians (absolute)
+    duration: float            # seconds
+    priority: str              # "low" or "high"
+    direction: float           # +1 = right, -1 = left
+    estimated_cost_mah: float  # energy cost
+    trigger_margin: float      # relative margin that triggered this
+    trigger_drift: float       # drift at trigger time
+
+
+@dataclass
+class LateralBudgetConfig:
+    """Configuration for proactive lateral drift management."""
+
+    # Tier thresholds (fraction of cone radius)
+    comfortable_margin: float = 0.6
+    attentive_margin: float = 0.3
+
+    # Correction parameters
+    gentle_bank_deg: float = 5.0
+    gentle_duration: float = 3.0
+    aggressive_bank_deg: float = 15.0
+    aggressive_duration: float = 5.0
+
+    # Energy budget
+    max_energy_budget: float = 200.0    # mAh total for corrections
+    min_battery_reserve: float = 15.0   # % — don't correct below this
+    drone_mass: float = 2.5             # kg
+    battery_voltage: float = 11.1       # V (3S LiPo)
+    battery_capacity: float = 5000.0    # mAh
+
+    # Active range (distance to target)
+    active_range_max: float = 5000.0    # meters
+    active_range_min: float = 500.0     # meters (PN takes over)
+
+    # Drift rate estimation
+    drift_window_s: float = 5.0
+    drift_rate_samples: int = 50
+
+    # Cooldown
+    min_correction_interval: float = 10.0  # seconds

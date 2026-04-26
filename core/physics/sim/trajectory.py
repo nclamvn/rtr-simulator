@@ -32,6 +32,7 @@ from core.physics.types import (
 )
 from core.physics.wind.base import WindField
 
+from core.physics.sim.lateral_budget import LateralBudgetManager
 from core.physics.sim.pn_guidance import ProportionalNavGuidance
 
 logger = logging.getLogger(__name__)
@@ -372,8 +373,9 @@ class TrajectorySimulator:
         self.wind = wind
         self.landmarks = landmarks
         self.config = config
-        self._risk_policy = None  # Set externally for adaptive cone widening
-        self._pn_config = None    # Set externally for PN terminal guidance
+        self._risk_policy = None    # Set externally for adaptive cone widening
+        self._pn_config = None      # Set externally for PN terminal guidance
+        self._lateral_config = None # Set externally for proactive lateral management
 
     def run(self, mission: MissionPackage, drone: DroneConfig) -> SimResult:
         """Run a single trajectory from drop point B to target T."""
@@ -419,6 +421,11 @@ class TrajectorySimulator:
         pn = ProportionalNavGuidance(self._pn_config) if self._pn_config else None
         pn_active = False
 
+        # Lateral budget manager (optional)
+        lat_mgr = LateralBudgetManager(self._lateral_config) if self._lateral_config else None
+        active_correction = None
+        correction_end_time = 0.0
+
         # Recording
         true_states: list[NominalState] = []
         estimated_states: list[NominalState] = []
@@ -460,6 +467,47 @@ class TrajectorySimulator:
                 accel_body_cmd, gyro_body_cmd = guidance.compute(
                     est_state, sigma_lateral=sigma_lateral
                 )
+
+                # Lateral budget evaluation (10Hz, only during cone guidance)
+                if lat_mgr is not None and step % camera_period == 0:
+                    d_to_tgt = float(np.linalg.norm(
+                        est_state.position[:2] - mission.target[:2]))
+                    lat_drift = abs(float(est_state.position[1]))
+                    cone_r_now = 500.0
+                    if hasattr(self.landmarks, "get_current_layer"):
+                        try:
+                            cl = self.landmarks.get_current_layer(est_state.position)
+                            if cl is not None:
+                                cone_r_now = getattr(cl, "radius", 500.0)
+                        except (ValueError, AttributeError):
+                            pass
+                    sig_lat = float(np.sqrt(
+                        self.estimator.P[0, 0] + self.estimator.P[1, 1]))
+                    spd = float(np.linalg.norm(est_state.velocity[:2]))
+                    batt = max(0.0, 100.0 * (1 - 2.5 * 4.5 * 0.7 * t / 3.6
+                               / self._lateral_config.battery_capacity))
+                    corr = lat_mgr.evaluate(
+                        lat_drift, cone_r_now, sig_lat, spd,
+                        batt, d_to_tgt, t)
+                    if corr is not None and t > correction_end_time:
+                        active_correction = corr
+                        correction_end_time = t + corr.duration
+                        lat_mgr.corrections_count += 1
+                        lat_mgr.energy_spent += corr.estimated_cost_mah
+                        lat_mgr.correction_history.append({
+                            "t": t, "bank_deg": float(np.degrees(corr.bank_angle)),
+                            "duration": corr.duration, "drift": lat_drift,
+                            "cost_mah": corr.estimated_cost_mah,
+                            "tier": lat_mgr.state,
+                        })
+
+                # Apply active lateral correction as roll override
+                if active_correction is not None and t < correction_end_time:
+                    gyro_body_cmd = gyro_body_cmd.copy()
+                    gyro_body_cmd[0] += (active_correction.bank_angle
+                                        * active_correction.direction)
+                if t >= correction_end_time:
+                    active_correction = None
 
             # True wind at current position
             wind_true = self.wind.get_wind(true_state.position, t)
@@ -689,6 +737,8 @@ class TrajectorySimulator:
                 **({"cone_progress": guidance.get_layer_progress()}
                    if hasattr(guidance, "get_layer_progress") else {}),
                 **(pn.get_report() if pn and pn.active else {}),
+                **({"lateral_management": lat_mgr.get_report()}
+                   if lat_mgr else {}),
             },
         )
 

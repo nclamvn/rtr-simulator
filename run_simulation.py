@@ -104,9 +104,13 @@ def run_sim(duration: float = 30.0, corridor_km: float = 5.0, seed: int = 42, us
     # Adaptive cone widening + PN terminal guidance
     if use_cone:
         from core.physics.landmark.cone_policy import RiskShapedCone
-        from core.physics.types import PNConfig
+        from core.physics.types import LateralBudgetConfig, PNConfig
         sim._risk_policy = RiskShapedCone()
         sim._pn_config = PNConfig()
+        sim._lateral_config = LateralBudgetConfig(
+            drone_mass=drone.mass,
+            battery_capacity=drone.battery_capacity,
+        )
 
     print(f"Running {duration}s simulation, {corridor_km}km corridor, seed={seed}...")
     t0 = time.time()
