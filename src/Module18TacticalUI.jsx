@@ -631,7 +631,9 @@ export default function Module18TacticalUI({ onBack }) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [mapSize, setMapSize] = useState({ w: 600, h: 700 });
+  const [dashW, setDashW] = useState(400);
   const mapContainerRef = useRef(null);
+  const dashRef = useRef(null);
 
   // Load real sim data
   useEffect(() => {
@@ -683,9 +685,19 @@ export default function Module18TacticalUI({ onBack }) {
     return () => obs.disconnect();
   }, []);
 
+  // Dashboard width observer
+  useEffect(() => {
+    const el = dashRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(entries => {
+      setDashW(Math.floor(entries[0].contentRect.width) - 28);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
   // ALL hooks BEFORE any conditional return (React hook order rule)
   const data = useMemo(() => raw ? transformSimData(raw, playIdx) : null, [raw, playIdx]);
-  const chartW = 280;
 
   // Loading state
   if (loading) return (
@@ -730,11 +742,26 @@ export default function Module18TacticalUI({ onBack }) {
         </div>
       </div>
 
+      {/* ── METRICS BAR — full width ── */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6,
+        padding: "6px 12px", borderBottom: `1px solid ${T.panelBorder}`,
+        background: T.panel, flexShrink: 0,
+      }}>
+        <MetricCard label="Est. Error" value={data.error.toFixed(1)} unit="m"
+          status={data.error > 100 ? "danger" : data.error > 30 ? "warning" : "good"} />
+        <MetricCard label="To Target" value={data.to_target.toFixed(0)} unit="m"
+          status={data.to_target < 50 ? "good" : undefined} />
+        <MetricCard label="EKF Updates" value={data.updates} status="good" />
+        <MetricCard label="Rejects" value={data.rejects}
+          status={data.rejects > 10 ? "danger" : "good"} />
+      </div>
+
       {/* ── MAIN CONTENT ── */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-        {/* ── LEFT: TACTICAL MAP ── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        {/* ── LEFT: TACTICAL MAP (55%) ── */}
+        <div style={{ flex: 55, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div ref={mapContainerRef} style={{ flex: 1, position: "relative" }}>
             <TacticalMap data={data} width={mapSize.w} height={mapSize.h} />
 
@@ -747,8 +774,8 @@ export default function Module18TacticalUI({ onBack }) {
               {[
                 { color: T.true_path, label: "TRUE", dash: false },
                 { color: T.est_path, label: "EST", dash: true },
-                { color: T.landmark_detected, label: "LM \u2713", dash: false },
-                { color: T.landmark_missed, label: "LM \u2717", dash: false },
+                { color: T.landmark_detected, label: "LM OK", dash: false },
+                { color: T.landmark_missed, label: "LM --", dash: false },
               ].map(({ color, label, dash }) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <svg width={16} height={2}>
@@ -775,9 +802,10 @@ export default function Module18TacticalUI({ onBack }) {
             </button>
             <button onClick={() => { setPlayIdx(0); setPlaying(false); }} style={{
               background: "none", border: `1px solid ${T.panelBorder}`, color: T.textDim,
-              width: 32, height: 26, borderRadius: 4, cursor: "pointer", fontFamily: FONT, fontSize: 11,
+              width: 44, height: 26, borderRadius: 4, cursor: "pointer", fontFamily: FONT, fontSize: 9,
+              letterSpacing: 0.5,
             }}>
-              \u21BA
+              RESET
             </button>
             <input
               type="range" min={0} max={raw.true_path.length - 1} value={playIdx}
@@ -799,26 +827,15 @@ export default function Module18TacticalUI({ onBack }) {
           </div>
         </div>
 
-        {/* ── RIGHT: DASHBOARD ── */}
-        <div style={{
-          width: 320, borderLeft: `1px solid ${T.panelBorder}`, background: T.panel,
-          overflow: "auto", padding: "8px 12px",
+        {/* ── RIGHT: DASHBOARD (45%) ── */}
+        <div ref={dashRef} style={{
+          flex: 45, borderLeft: `1px solid ${T.panelBorder}`, background: T.panel,
+          overflow: "auto", padding: "8px 14px", minWidth: 0,
           display: "flex", flexDirection: "column", gap: 2,
         }}>
 
-          {/* Primary metrics */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-            <MetricCard label="Est. Error" value={data.error.toFixed(1)} unit="m"
-              status={data.error > 100 ? "danger" : data.error > 30 ? "warning" : "good"} />
-            <MetricCard label="To Target" value={data.to_target.toFixed(0)} unit="m"
-              status={data.to_target < 50 ? "good" : undefined} />
-            <MetricCard label="EKF Updates" value={data.updates} status="good" small />
-            <MetricCard label="Rejects" value={data.rejects}
-              status={data.rejects > 10 ? "danger" : "good"} small />
-          </div>
-
-          {/* Mode + Status row */}
-          <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+          {/* Mode + Compass row */}
+          <div style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 1 }}>MODE</span>
@@ -833,60 +850,58 @@ export default function Module18TacticalUI({ onBack }) {
                 <StatusBadge status={data.ekf_state} />
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <Compass heading={data.heading} size={60} />
-            </div>
+            <Compass heading={data.heading} size={60} />
           </div>
 
           {/* Layer progression */}
-          <SectionHeader icon={"\u25C6"}>Layer Progression</SectionHeader>
+          <SectionHeader>Layer Progression</SectionHeader>
           <LayerProgress current={data.cone_layer.current} total={data.cone_layer.total} />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
             <span style={{ fontSize: 9, color: T.textDim }}>{data.cone_layer.current}/{data.cone_layer.total} layers</span>
             <span style={{ fontSize: 9, color: T.accent }}>{data.progress}% complete</span>
           </div>
 
-          {/* Navigation */}
-          <SectionHeader icon={"\u25CE"}>Navigation</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
-            <DataRow label="True N" value={data.true_pos.n.toFixed(0)} unit="m" color={T.accent} />
-            <DataRow label="True E" value={data.true_pos.e.toFixed(0)} unit="m" color={T.accent} />
-            <DataRow label="Est N" value={data.est_pos.n.toFixed(0)} unit="m" color={T.est_path} />
-            <DataRow label="Est E" value={data.est_pos.e.toFixed(0)} unit="m" color={T.est_path} />
-            <DataRow label="Speed" value={data.speed.toFixed(1)} unit="m/s" />
-            <DataRow label="Alt" value={data.true_pos.alt.toFixed(0)} unit="m" />
+          {/* 2-column: Navigation + Uncertainty */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px", marginTop: 4 }}>
+            <div>
+              <SectionHeader>Navigation</SectionHeader>
+              <DataRow label="True N" value={data.true_pos.n.toFixed(0)} unit="m" color={T.accent} />
+              <DataRow label="True E" value={data.true_pos.e.toFixed(0)} unit="m" color={T.accent} />
+              <DataRow label="Est N" value={data.est_pos.n.toFixed(0)} unit="m" color={T.est_path} />
+              <DataRow label="Est E" value={data.est_pos.e.toFixed(0)} unit="m" color={T.est_path} />
+              <DataRow label="Speed" value={data.speed.toFixed(1)} unit="m/s" />
+              <DataRow label="Alt" value={data.true_pos.alt.toFixed(0)} unit="m" />
+            </div>
+            <div>
+              <SectionHeader>Uncertainty (3-sigma)</SectionHeader>
+              <DataRow label="SIG N" value={data.sigma.n.toFixed(1)} unit="m"
+                color={data.sigma.n > 50 ? T.danger : data.sigma.n > 20 ? T.warning : T.accent} />
+              <DataRow label="SIG E" value={data.sigma.e.toFixed(1)} unit="m"
+                color={data.sigma.e > 50 ? T.danger : data.sigma.e > 20 ? T.warning : T.accent} />
+              <DataRow label="SIG Alt" value={data.sigma.alt.toFixed(1)} unit="m" />
+              <DataRow label="Lat Drift" value={data.lat_drift.toFixed(0)} unit="m"
+                color={data.lat_drift > 100 ? T.danger : T.warning} />
+            </div>
           </div>
 
-          {/* Uncertainty */}
-          <SectionHeader icon={"\u25CC"}>Uncertainty (3\u03C3)</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
-            <DataRow label="\u03C3_N" value={data.sigma.n.toFixed(1)} unit="m"
-              color={data.sigma.n > 50 ? T.danger : data.sigma.n > 20 ? T.warning : T.accent} />
-            <DataRow label="\u03C3_E" value={data.sigma.e.toFixed(1)} unit="m"
-              color={data.sigma.e > 50 ? T.danger : data.sigma.e > 20 ? T.warning : T.accent} />
-            <DataRow label="\u03C3_Alt" value={data.sigma.alt.toFixed(1)} unit="m" />
-            <DataRow label="Lat Drift" value={data.lat_drift.toFixed(0)} unit="m"
-              color={data.lat_drift > 100 ? T.danger : T.warning} />
+          {/* 2-column: Cone + Environment */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px", marginTop: 4 }}>
+            <div>
+              <SectionHeader>Cone Constraint</SectionHeader>
+              <DataRow label="Radius" value={data.cone_r.toFixed(0)} unit="m" color={T.info} />
+              <DataRow label="Margin" value={data.margin.toFixed(0)} unit="m"
+                color={data.margin < 0 ? T.danger : T.accent} />
+            </div>
+            <div>
+              <SectionHeader>Environment</SectionHeader>
+              <WindIndicator speed={8.2} direction={94} />
+            </div>
           </div>
 
-          {/* Cone constraint */}
-          <SectionHeader icon={"\u25BD"}>Cone Constraint</SectionHeader>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
-            <DataRow label="Radius" value={data.cone_r.toFixed(0)} unit="m" color={T.info} />
-            <DataRow label="Margin" value={data.margin.toFixed(0)} unit="m"
-              color={data.margin < 0 ? T.danger : T.accent} />
-          </div>
-
-          {/* Environment */}
-          <SectionHeader icon={"\u2248"}>Environment</SectionHeader>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <WindIndicator speed={8.2} direction={94} />
-          </div>
-
-          {/* Position Error Chart */}
-          <SectionHeader icon={"\u25B3"}>Position Error</SectionHeader>
+          {/* Position Error Chart — full dashboard width */}
+          <SectionHeader>Position Error</SectionHeader>
           <MiniChart
-            data={data.error_history} width={chartW} height={100}
+            data={data.error_history} width={dashW} height={120}
             color={T.est_path} filled threshold={100}
             thresholdColor={T.danger} thresholdLabel="100m" yMax={Math.max(280, data.error * 1.2)}
           />
@@ -895,10 +910,10 @@ export default function Module18TacticalUI({ onBack }) {
             <span style={{ fontSize: 8, color: T.textDim }}>{data.duration.toFixed(0)}s</span>
           </div>
 
-          {/* NIS Chart */}
-          <SectionHeader icon={"\u25C7"}>NIS (Innovation)</SectionHeader>
+          {/* NIS Chart — full dashboard width */}
+          <SectionHeader>NIS (Innovation)</SectionHeader>
           <NISScatter
-            data={data.nis_history} width={chartW} height={70}
+            data={data.nis_history} width={dashW} height={80}
             gate={9.21}
           />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
