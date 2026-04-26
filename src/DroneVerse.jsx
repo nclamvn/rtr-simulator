@@ -500,7 +500,7 @@ Format as plain text, no markdown.`;
   const eliminated = drAll.filter(d => d.status === "ELIMINATED").length;
 
   if (showSimView) {
-    return <Suspense fallback={<LazyFallback />}><Module18TacticalUI onBack={() => setShowSimView(false)} /></Suspense>;
+    return <Suspense fallback={<LazyFallback />}><Module18TacticalUI onBack={() => setShowSimView(false)} theme={theme} /></Suspense>;
   }
 
   return (

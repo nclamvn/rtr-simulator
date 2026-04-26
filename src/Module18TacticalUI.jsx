@@ -5,33 +5,70 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 // Design: Defense-grade dark ops, inspired by Lockheed C2
 // ═══════════════════════════════════════════════════════════
 
-// ── THEME ──
-const T = {
-  bg: "#0a0e14",
-  panel: "#0f1318",
-  panelBorder: "#1a2030",
-  grid: "rgba(60,85,110,0.5)",
-  gridFine: "rgba(60,85,110,0.25)",
-  text: "#a8bdd0",
-  textBright: "#dce8f0",
-  textDim: "#7a90a8",
-  accent: "#00e5a0",
-  accentDim: "rgba(0,229,160,0.15)",
-  warning: "#f0a030",
-  warningDim: "rgba(240,160,48,0.12)",
-  danger: "#ff4060",
-  dangerDim: "rgba(255,64,96,0.12)",
-  info: "#3b82f6",
-  infoDim: "rgba(59,130,246,0.12)",
-  true_path: "#00e5a0",
-  est_path: "#f0a030",
-  cone: "rgba(59,130,246,0.25)",
-  coneBorder: "rgba(59,130,246,0.5)",
-  landmark_detected: "#00e5a0",
-  landmark_missed: "#4a5568",
+// ── THEMES ──
+const THEMES = {
+  dark: {
+    bg: "#0a0e14",
+    panel: "#0f1318",
+    panelBorder: "#1a2030",
+    grid: "rgba(60,85,110,0.5)",
+    gridFine: "rgba(60,85,110,0.25)",
+    text: "#a8bdd0",
+    textBright: "#dce8f0",
+    textDim: "#7a90a8",
+    accent: "#00a878",
+    accentDim: "rgba(0,168,120,0.15)",
+    warning: "#d08020",
+    warningDim: "rgba(208,128,32,0.12)",
+    danger: "#e03050",
+    dangerDim: "rgba(224,48,80,0.12)",
+    info: "#3b82f6",
+    infoDim: "rgba(59,130,246,0.12)",
+    true_path: "#00e5a0",
+    est_path: "#f0a030",
+    cone: "rgba(59,130,246,0.25)",
+    coneBorder: "rgba(59,130,246,0.5)",
+    landmark_detected: "#00e5a0",
+    landmark_missed: "#4a5568",
+    mapBg: "#0a0e14",
+    mapGrid: "rgba(60,85,110,0.5)",
+    mapLabel: "#90a8c0",
+    mapScale: "#b0c4d8",
+  },
+  light: {
+    bg: "#f4f6f8",
+    panel: "#ffffff",
+    panelBorder: "#d0d8e0",
+    grid: "rgba(100,120,140,0.25)",
+    gridFine: "rgba(100,120,140,0.12)",
+    text: "#3a4a5c",
+    textBright: "#1a2a3c",
+    textDim: "#6a7a8c",
+    accent: "#00855e",
+    accentDim: "rgba(0,133,94,0.1)",
+    warning: "#b06800",
+    warningDim: "rgba(176,104,0,0.08)",
+    danger: "#c02040",
+    dangerDim: "rgba(192,32,64,0.08)",
+    info: "#2563eb",
+    infoDim: "rgba(37,99,235,0.08)",
+    true_path: "#00855e",
+    est_path: "#b06800",
+    cone: "rgba(37,99,235,0.12)",
+    coneBorder: "rgba(37,99,235,0.4)",
+    landmark_detected: "#00855e",
+    landmark_missed: "#b0b8c0",
+    mapBg: "#eef1f5",
+    mapGrid: "rgba(100,120,140,0.3)",
+    mapLabel: "#4a5a6c",
+    mapScale: "#3a4a5c",
+  },
 };
 
 const FONT = "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', monospace";
+
+// Active theme reference — set by main component before render
+let T = THEMES.dark;
 
 // ── Transform raw sim_data.json → tactical data at frame index ──
 function transformSimData(raw, idx) {
@@ -317,7 +354,7 @@ function NISScatter({ data, width, height, gate }) {
 }
 
 // ── TACTICAL MAP ──
-function TacticalMap({ data, width, height }) {
+function TacticalMap({ data, width, height, themeKey }) {
   const canvasRef = useRef(null);
   const corridor = data.corridor;
   const padding = 40;
@@ -345,17 +382,17 @@ function TacticalMap({ data, width, height }) {
     ];
 
     // Background
-    ctx.fillStyle = T.bg;
+    ctx.fillStyle = T.mapBg;
     ctx.fillRect(0, 0, width, height);
 
     // Grid
-    ctx.strokeStyle = T.grid;
+    ctx.strokeStyle = T.mapGrid;
     ctx.lineWidth = 0.8;
     const gridStep = 500;
     for (let n = 0; n <= corridor; n += gridStep) {
       const [, y] = toScreen(n, 0);
       ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(width - padding, y); ctx.stroke();
-      ctx.fillStyle = "#90a8c0";
+      ctx.fillStyle = T.mapLabel;
       ctx.font = `11px ${FONT}`;
       ctx.textAlign = "right";
       ctx.fillText(`${(n / 1000).toFixed(1)}km`, padding - 4, y + 4);
@@ -401,7 +438,7 @@ function TacticalMap({ data, width, height }) {
     ctx.fill();
 
     // Layer labels
-    ctx.fillStyle = "#90a8c0";
+    ctx.fillStyle = T.mapLabel;
     ctx.font = `10px ${FONT}`;
     ctx.textAlign = "left";
     data.cone_layers.forEach((layer, i) => {
@@ -509,18 +546,18 @@ function TacticalMap({ data, width, height }) {
     // Scale bar
     const scaleBarM = 500;
     const scaleBarPx = scaleBarM * scale;
-    ctx.strokeStyle = "#b0c4d8";
+    ctx.strokeStyle = T.mapScale;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(width - padding - scaleBarPx, height - 16);
     ctx.lineTo(width - padding, height - 16);
     ctx.stroke();
-    ctx.fillStyle = "#b0c4d8";
+    ctx.fillStyle = T.mapScale;
     ctx.font = `11px ${FONT}`;
     ctx.textAlign = "center";
     ctx.fillText(`${scaleBarM}m`, width - padding - scaleBarPx / 2, height - 6);
 
-  }, [data, width, height]);
+  }, [data, width, height, themeKey]);
 
   return <canvas ref={canvasRef} style={{ width, height, borderRadius: 4 }} />;
 }
@@ -623,7 +660,9 @@ function WindIndicator({ speed, direction }) {
 }
 
 // ── MAIN LAYOUT ──
-export default function Module18TacticalUI({ onBack }) {
+export default function Module18TacticalUI({ onBack, theme = "dark" }) {
+  // Set active theme for sub-components
+  T = THEMES[theme] || THEMES.dark;
   const [raw, setRaw] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -763,7 +802,7 @@ export default function Module18TacticalUI({ onBack }) {
         {/* ── LEFT: TACTICAL MAP (55%) ── */}
         <div style={{ flex: 55, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div ref={mapContainerRef} style={{ flex: 1, position: "relative" }}>
-            <TacticalMap data={data} width={mapSize.w} height={mapSize.h} />
+            <TacticalMap data={data} width={mapSize.w} height={mapSize.h} themeKey={theme} />
 
             {/* Map legend overlay */}
             <div style={{
