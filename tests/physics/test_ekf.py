@@ -3,6 +3,8 @@
 Covers: P growth, P reduction, gating, convergence, symmetry, PD, Joseph form.
 """
 
+from __future__ import annotations
+
 import numpy as np
 import pytest
 

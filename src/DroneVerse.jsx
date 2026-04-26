@@ -20,7 +20,7 @@ import { MISSIONS } from "./droneverse/missions.js";
 import { ErrorBoundary } from "./droneverse/ErrorBoundary.jsx";
 import RadarPPI from "./droneverse/RadarPPI.jsx";
 import Viewport3D from "./droneverse/Viewport3D.jsx";
-import SimulationView from "./SimulationView.jsx";
+import Module18TacticalUI from "./Module18TacticalUI.jsx";
 
 
 
@@ -492,7 +492,7 @@ Format as plain text, no markdown.`;
   const eliminated = drAll.filter(d => d.status === "ELIMINATED").length;
 
   if (showSimView) {
-    return <SimulationView theme={theme} onBack={() => setShowSimView(false)} />;
+    return <Module18TacticalUI onBack={() => setShowSimView(false)} />;
   }
 
   return (
